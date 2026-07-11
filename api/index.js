@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { generateClientTokenFromReadWriteToken } from '@vercel/blob';
+import { put } from '@vercel/blob';
 
 // 1. Kết nối cơ sở dữ liệu Turso SQL
 const client = createClient({
@@ -7,7 +7,7 @@ const client = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-// Hàm hỗ trợ đọc dữ liệu thô (Stream Buffer) từ Client gửi lên cho Node.js thô
+// Hàm đọc dữ liệu dạng thô (Stream Buffer) từ Frontend gửi lên
 async function getRawBody(req) {
   const buffers = [];
   for await (const chunk of req) {
@@ -18,10 +18,10 @@ async function getRawBody(req) {
 }
 
 export default async function handler(req, res) {
-  // Thiết lập CORS đầy đủ chống chặn kết nối
+  // Cấu hình CORS đầy đủ chống lỗi chặn trình duyệt
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-filename'); // Cho phép nhận tên file từ header
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     `);
 
     // ==========================================
-    // XỬ LÝ LỆNH GET
+    // XỬ LÝ LỆNH LẤY DỮ LIỆU (GET)
     // ==========================================
     if (req.method === 'GET') {
       const result = await client.execute("SELECT * FROM users ORDER BY id DESC LIMIT 20");
@@ -45,25 +45,32 @@ export default async function handler(req, res) {
     }
 
     // ==========================================
-    // XỬ LÝ LỆNH POST
+    // XỬ LÝ LỆNH LƯU DỮ LIỆU/UPLOAD (POST)
     // ==========================================
     if (req.method === 'POST') {
-      // Đọc toàn bộ dữ liệu thô được gửi lên an toàn
-      const body = await getRawBody(req);
-
-      // Nhận diện luồng upload ảnh lên Storage
+      
+      // LUỒNG XỬ LÝ 1: Frontend gọi chuyên biệt để Tải ảnh trực tiếp lên Vercel Storage
       if (req.query.action === 'upload') {
-        const clientToken = await generateClientTokenFromReadWriteToken({
-          token: process.env.BLOB_READ_WRITE_TOKEN,
-          payload: JSON.stringify({ userId: 'user-anonymous' }),
-          maximumSizeInBytes: 4 * 1024 * 1024, // Giới hạn tệp tối đa 4MB
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif'],
+        const filename = req.headers['x-filename'] || 'upload_image.png';
+        
+        // Đọc dữ liệu nhị phân của file từ request stream
+        const buffers = [];
+        for await (const chunk of req) {
+          buffers.push(chunk);
+        }
+        const fileBuffer = Buffer.concat(buffers);
+
+        // Đẩy tệp thẳng lên Vercel Blob bằng mã Token nội bộ của Server
+        const blob = await put(filename, fileBuffer, {
+          access: 'public',
+          token: process.env.BLOB_READ_WRITE_TOKEN
         });
 
-        return res.status(200).json({ clientToken, type: 'clientToken' });
+        return res.status(200).json({ success: true, url: blob.url });
       }
 
-      // Xử lý luồng lưu text vào Database SQL
+      // LUỒNG XỬ LÝ 2: Lưu dữ liệu Text kèm link ảnh vào Turso SQL thông thường
+      const body = await getRawBody(req);
       const { name, email, avatar_url } = body;
 
       if (!name || !email) {
@@ -72,16 +79,15 @@ export default async function handler(req, res) {
 
       await client.execute({
         sql: "INSERT INTO users (name, email, avatar_url) VALUES (?, ?, ?)",
-        args: [name, email, avatar_url || null]
+        args: [name.trim(), email.trim(), avatar_url || null]
       });
 
       return res.status(200).json({ success: true, message: "Dữ liệu được lưu thành công!" });
     }
 
-    return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    return res.status(405).json({ success: false, error: "Phương thức không được hỗ trợ!" });
 
   } catch (error) {
-    // Trả về JSON chứa thông báo lỗi để hiển thị trực tiếp lên màn hình Client
     return res.status(500).json({ success: false, error: error.message });
   }
 }
