@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { handleUpload } from '@vercel/blob/next';
+import { generateClientTokenFromReadWriteToken } from '@vercel/blob';
 
 // 1. Khởi tạo kết nối Turso SQL
 const client = createClient({
@@ -8,7 +8,7 @@ const client = createClient({
 });
 
 export default async function handler(req, res) {
-  // Cấu hình CORS cho phép Frontend tương tác mượt mà
+  // Cấu hình CORS đầy đủ cho Frontend tương tác
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // TỰ ĐỘNG TẠO BẢNG 'users' (Thêm cột avatar_url để lưu link ảnh)
+    // TỰ ĐỘNG TẠO BẢNG 'users' NẾU CHƯA CÓ
     await client.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,9 +38,21 @@ export default async function handler(req, res) {
     // XỬ LÝ LỆNH LƯU DỮ LIỆU (POST)
     // ==========================================
     if (req.method === 'POST') {
-      // KIỂM TRA ĐƯỜNG DẪN: Nếu Frontend gọi đến để cấp quyền upload ảnh
+      
+      // GIẢI PHÁP MỚI CHO STORAGE: Nếu Frontend yêu cầu cấp quyền Upload File
       if (req.query.action === 'upload') {
-        return await handleBlobUpload(req, res);
+        let body = req.body;
+        if (typeof body === 'string') body = JSON.parse(body);
+
+        // Tạo mã Token an toàn cho phía Client dựa trên BLOB_READ_WRITE_TOKEN bảo mật của hệ thống
+        const clientToken = await generateClientTokenFromReadWriteToken({
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+          payload: JSON.stringify({ userId: 'user-anonymous' }),
+          maximumSizeInBytes: 5 * 1024 * 1024, // Giới hạn file tối đa 5MB
+          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif'],
+        });
+
+        return res.status(200).json({ clientToken, type: 'clientToken' });
       }
 
       // Xử lý lưu thông tin Text vào SQL thông thường
@@ -50,7 +62,7 @@ export default async function handler(req, res) {
       const { name, email, avatar_url } = body || {};
 
       if (!name || !email) {
-        return res.status(400).json({ success: false, error: "Thiếu thông tin name hoặc email!" });
+        return res.status(400).json({ success: false, error: "Thiếu thông tin tên hoặc email!" });
       }
 
       await client.execute({
@@ -64,28 +76,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "Phương thức không được hỗ trợ!" });
 
   } catch (error) {
+    // Trả về định dạng JSON lỗi thay vì làm sập trang trắng
     return res.status(500).json({ success: false, error: error.message });
-  }
-}
-
-// Hàm xử lý tạo token xác thực an toàn cho Vercel Blob Storage
-async function handleBlobUpload(req, res) {
-  try {
-    const jsonResponse = await handleUpload({
-      body: req.body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        return {
-          allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'],
-          tokenPayload: JSON.stringify({ userId: 'user-anonymous' }), // Có thể đổi thành ID người dùng thật nếu có hệ thống đăng nhập
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('Tải tệp thành công lên Vercel Storage:', blob.url);
-      },
-    });
-    return res.status(200).json(jsonResponse);
-  } catch (error) {
-    return res.status(400).json({ error: error.message });
   }
 }
