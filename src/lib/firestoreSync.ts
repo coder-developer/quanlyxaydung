@@ -120,7 +120,7 @@ export async function deleteDocument(collectionName: string, docId: string): Pro
  */
 export async function batchSaveCollection(collectionName: string, items: any[], idField = 'id'): Promise<void> {
   try {
-    const batch = writeBatch(db);
+    let batch = writeBatch(db);
     let count = 0;
     
     for (const item of items) {
@@ -142,6 +142,7 @@ export async function batchSaveCollection(collectionName: string, items: any[], 
       // Firestore batch limit is 500 writes
       if (count >= 400) {
         await batch.commit();
+        batch = writeBatch(db);
         count = 0;
       }
     }

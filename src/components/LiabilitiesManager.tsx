@@ -239,6 +239,8 @@ export default function LiabilitiesManager({
     if (companyConfig) {
       setNewVoucherUnitName(companyConfig.companyName);
       setNewVoucherUnitAddress(companyConfig.siteOffice);
+      setVouchersList(items => items.map(item => ({ ...item, unitName: companyConfig.companyName, unitAddress: companyConfig.siteOffice })));
+      setSelectedVoucher(item => item ? ({ ...item, unitName: companyConfig.companyName, unitAddress: companyConfig.siteOffice }) : item);
     }
   }, [companyConfig]);
   const [newVoucherBookNo, setNewVoucherBookNo] = useState<string>('Q-01');
@@ -632,7 +634,7 @@ export default function LiabilitiesManager({
         tableRowsHtml += `
           <tr>
             <td style="text-align: center; border: 1px solid #cbd5e1; padding: 6px 8px;">${stt++}</td>
-            <td style="mso-number-format:'@'; font-weight: bold; color: #b45309; border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.id}</td>
+            <td style="mso-number-format:'@'; font-weight: bold; color: #b45309; border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.code || ctr.id}</td>
             <td style="font-weight: bold; border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.name}</td>
             <td style="color: #d97706; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 6px 8px; background-color: #fffbeb;">${ctr.type === 'Subcontractor' ? 'THẦU PHỤ' : 'CUNG CẤP VẬT TƯ'}</td>
             <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.contactPerson}</td>
@@ -751,56 +753,70 @@ export default function LiabilitiesManager({
 
   // --- HANDLERS FOR VOUCHER SYSTEM ---
   const handlePrintVoucher = (v: AccountingVoucher) => {
-    const printContent = document.getElementById(`printable-paper-voucher-${v.id}`);
-    if (!printContent) return;
-
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Vui lòng cho phép mở popup trình duyệt để sử dụng tính năng in!');
       return;
     }
 
+    const d = new Date(v.date);
+    const companyName = (companyConfig?.companyName || v.unitName).trim();
+    const companyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
+    const director = companyConfig?.directorName || '';
+    const accountant = companyConfig?.chiefAccountantName || '';
+    const treasurer = companyConfig?.treasurerName || '';
+    const voucherTitle = v.type === 'Receipt' ? 'PHIẾU THU' : 'PHIẾU CHI';
+    const payerLabel = v.type === 'Receipt' ? 'nộp' : 'nhận';
+
     printWindow.document.write(`
-      <html>
+      <!doctype html><html lang="vi">
         <head>
+          <meta charset="utf-8">
           <title>${v.type === 'Receipt' ? 'Phieu_Thu' : 'Phieu_Chi'}_${v.voucherNo}</title>
           <style>
-            @page {
-              size: A4 portrait;
-              margin: 1.5cm;
-            }
-            body {
-              font-family: 'Times New Roman', Times, serif;
-              color: #000000;
-              background-color: #ffffff;
-              padding: 0;
-              margin: 0;
-              font-size: 11pt;
-              line-height: 1.4;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .font-italic { font-style: italic; }
-            .uppercase { text-transform: uppercase; }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 10px;
-            }
-            td {
-              vertical-align: top;
-              padding: 4px 0;
-            }
-            .underline-dots {
-              border-bottom: 1px dotted #000;
-            }
+            @page { size: A4 portrait; margin: 14mm 16mm 14mm 16mm; }
+            * { box-sizing: border-box; }
+            html, body { width: 100%; margin: 0; padding: 0; background: #fff; color: #000; }
+            body { font-family: "Times New Roman", Times, serif; font-size: 11pt; line-height: 1.35; }
+            .sheet { width: 100%; max-width: 178mm; margin: 0 auto; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            td { vertical-align: top; padding: 1.5mm 1mm; overflow-wrap: anywhere; }
+            .head-left { width: 56%; text-align: center; }
+            .head-right { width: 44%; text-align: center; font-size: 9.5pt; }
+            .company { font-weight: 700; text-transform: uppercase; font-size: 11pt; }
+            .address { font-size: 9.5pt; font-style: italic; margin-top: 1mm; }
+            h1 { margin: 7mm 0 1mm; text-align: center; font-size: 18pt; line-height: 1.1; }
+            .date { text-align: center; font-style: italic; margin-bottom: 3mm; }
+            .meta { width: 39%; margin-left: auto; font-size: 10.5pt; }
+            .line { margin: 2.2mm 0; }
+            .dots { border-bottom: .3mm dotted #333; padding: 0 1.5mm 1mm; }
+            .amount { font-weight: 700; white-space: nowrap; }
+            .signatures { margin-top: 6mm; page-break-inside: avoid; }
+            .signatures td { width: 20%; text-align: center; font-size: 9.5pt; padding: 1mm; }
+            .sign-title { font-weight: 700; text-transform: uppercase; min-height: 9mm; }
+            .sign-note { font-size: 8pt; font-style: italic; }
+            .sign-space { height: 24mm; }
+            .sign-name { font-weight: 700; min-height: 7mm; }
+            .footer-lines { margin-top: 5mm; font-size: 10pt; page-break-inside: avoid; }
+            @media print { .sheet { max-width: none; } }
           </style>
         </head>
         <body onload="window.print(); window.close();">
-          <div style="padding: 10px;">
-            ${printContent.innerHTML}
-          </div>
+          <main class="sheet">
+            <table><tr><td class="head-left"><div class="company">${companyName}</div><div class="address">Địa chỉ: ${companyAddress}</div></td><td class="head-right"><strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br><em>(Ban hành theo chế độ kế toán doanh nghiệp hiện hành)</em></td></tr></table>
+            <h1>${voucherTitle}</h1>
+            <div class="date">Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</div>
+            <table class="meta"><tr><td><strong>Quyển số:</strong> ${v.bookNo}<br><strong>Số:</strong> ${v.voucherNo}<br>Nợ: ${v.debitAccount}<br>Có: ${v.creditAccount}</td></tr></table>
+            <div class="line"><strong>Họ và tên người ${payerLabel} tiền:</strong> <span class="dots">${v.personName}</span></div>
+            <div class="line"><strong>Địa chỉ:</strong> <span class="dots">${v.personAddress}</span></div>
+            <div class="line"><strong>Lý do ${v.type === 'Receipt' ? 'nộp' : 'chi'}:</strong> <span class="dots">${v.reason}</span></div>
+            <div class="line"><strong>Số tiền:</strong> <span class="amount">${v.amount.toLocaleString('vi-VN')} đồng</span></div>
+            <div class="line"><strong>Viết bằng chữ:</strong> <span class="dots"><em>${v.amountWords}</em></span></div>
+            <div class="line"><strong>Kèm theo:</strong> ${v.attachmentsCount} chứng từ gốc - ${v.attachmentsDetail}</div>
+            <div class="date" style="text-align:right;margin-top:5mm">Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</div>
+            <table class="signatures"><tr><td><div class="sign-title">Giám đốc</div><div class="sign-note">(Ký, họ tên, đóng dấu)</div><div class="sign-space"></div><div class="sign-name">${director}</div></td><td><div class="sign-title">Kế toán trưởng</div><div class="sign-note">(Ký, họ tên)</div><div class="sign-space"></div><div class="sign-name">${accountant}</div></td><td><div class="sign-title">Người lập phiếu</div><div class="sign-note">(Ký, họ tên)</div><div class="sign-space"></div><div class="sign-name">${treasurer}</div></td><td><div class="sign-title">${v.type === 'Receipt' ? 'Người nộp tiền' : 'Người nhận tiền'}</div><div class="sign-note">(Ký, họ tên)</div><div class="sign-space"></div><div class="sign-name">${v.personName}</div></td><td><div class="sign-title">Thủ quỹ</div><div class="sign-note">(Ký, họ tên)</div><div class="sign-space"></div><div class="sign-name">${treasurer}</div></td></tr></table>
+            <div class="footer-lines"><div><strong>Đã nhận đủ số tiền (viết bằng chữ):</strong> ${v.receivedWords || v.amountWords}</div><div><strong>Tỷ giá ngoại tệ:</strong> ${v.exchangeRateDetail}</div><div><strong>Số tiền quy đổi:</strong> ${v.convertedAmount}</div></div>
+          </main>
         </body>
       </html>
     `);
@@ -810,6 +826,8 @@ export default function LiabilitiesManager({
   const handleExportVoucherExcel = (v: AccountingVoucher) => {
     const filename = `${v.type === 'Receipt' ? 'Phieu_Thu' : 'Phieu_Chi'}_${v.voucherNo}.xls`;
     const d = new Date(v.date);
+    const exportCompanyName = (companyConfig?.companyName || v.unitName).trim();
+    const exportCompanyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
     
     const htmlContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -837,11 +855,11 @@ export default function LiabilitiesManager({
       <body>
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
-            <td colspan="3" style="font-weight: bold; text-align: left; font-size: 11pt;">ĐƠN VỊ: ${v.unitName.toUpperCase()}</td>
+            <td colspan="3" style="font-weight: bold; text-align: left; font-size: 11pt;">ĐƠN VỊ: ${exportCompanyName.toUpperCase()}</td>
             <td colspan="3" style="font-weight: bold; text-align: center; font-size: 11pt;">${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</td>
           </tr>
           <tr>
-            <td colspan="3" style="text-align: left; font-size: 9.5pt; font-style: italic; color: #475569;">Địa chỉ: ${v.unitAddress}</td>
+            <td colspan="3" style="text-align: left; font-size: 9.5pt; font-style: italic; color: #475569;">Địa chỉ: ${exportCompanyAddress}</td>
             <td colspan="3" style="text-align: center; font-size: 9.5pt; font-style: italic; color: #475569;">
               ${v.type === 'Receipt' ? '(Ban hành theo Thông tư số 200/2014/TT-BTC<br>Ngày 22/12/2014 của Bộ Tài chính)' : '(Kèm theo Thông tư số 99/2025/TT-BTC<br>ngày 27 tháng 10 năm 2025 của Bộ trưởng Bộ Tài chính)'}
             </td>
@@ -987,6 +1005,8 @@ export default function LiabilitiesManager({
   const handleExportVoucherWord = (v: AccountingVoucher) => {
     const filename = `${v.type === 'Receipt' ? 'Phieu_Thu' : 'Phieu_Chi'}_${v.voucherNo}.doc`;
     const d = new Date(v.date);
+    const exportCompanyName = (companyConfig?.companyName || v.unitName).trim();
+    const exportCompanyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
 
     const htmlContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -1037,8 +1057,8 @@ export default function LiabilitiesManager({
         <table style="width:100%;">
           <tr>
             <td style="width: 55%; font-weight: bold;">
-              ĐƠN VỊ: ${v.unitName.toUpperCase()}<br>
-              <span style="font-weight: normal; font-style: italic;">Địa chỉ: ${v.unitAddress}</span>
+              ĐƠN VỊ: ${exportCompanyName.toUpperCase()}<br>
+              <span style="font-weight: normal; font-style: italic;">Địa chỉ: ${exportCompanyAddress}</span>
             </td>
             <td style="width: 45%; text-align: center;">
               <strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br>
@@ -1807,7 +1827,7 @@ export default function LiabilitiesManager({
                   const contractCount = contracts.filter(c => c.partnerId === ctr.id).length;
                   return (
                     <tr key={ctr.id} className="hover:bg-slate-50/40">
-                      <td className="px-4 py-3 font-mono font-semibold text-slate-500">{ctr.id}</td>
+                      <td className="px-4 py-3 font-mono font-semibold text-slate-500">{ctr.code || ctr.id}</td>
                       <td className="px-4 py-3 text-slate-900 font-bold flex items-center gap-2">
                         <Handshake className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                         <span>{ctr.name}</span>
@@ -1995,7 +2015,7 @@ export default function LiabilitiesManager({
                             }}
                             className="hover:bg-amber-50 focus:bg-amber-50 focus:outline-none p-0.5 rounded cursor-pointer border-b border-slate-200"
                           >
-                            {selectedVoucher.unitName === 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP' ? (companyConfig?.companyName || selectedVoucher.unitName) : selectedVoucher.unitName}
+                            {companyConfig?.companyName || selectedVoucher.unitName}
                           </span>
                         </div>
                         <div className="text-[10px] leading-relaxed text-slate-700">
@@ -2008,7 +2028,7 @@ export default function LiabilitiesManager({
                             }}
                             className="hover:bg-amber-50 focus:bg-amber-50 focus:outline-none p-0.5 rounded cursor-pointer border-b border-slate-200"
                           >
-                            {selectedVoucher.unitAddress === 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh' ? (companyConfig?.siteOffice || selectedVoucher.unitAddress) : selectedVoucher.unitAddress}
+                            {companyConfig?.siteOffice || selectedVoucher.unitAddress}
                           </span>
                         </div>
                       </div>

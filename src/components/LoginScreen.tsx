@@ -11,12 +11,14 @@ import {
   UserPlus, 
   LogIn, 
   ArrowLeft,
-  CheckCircle2
+  CheckCircle2,
+  UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
+import { apiLogin, apiRegister } from '../lib/api';
 
 interface LoginScreenProps {
-  onLoginSuccess: (role: UserRole, fullName?: string) => void;
+  onLoginSuccess: (role: UserRole, fullName?: string, employeeId?: string) => void;
   appTitle?: string;
   companyName?: string;
 }
@@ -34,6 +36,7 @@ export default function LoginScreen({
   appTitle = 'CONSTRUCT-OS', 
   companyName = 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT' 
 }: LoginScreenProps) {
+  const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
   
   // App modes: 'login' or 'register'
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
@@ -55,6 +58,8 @@ export default function LoginScreen({
   const [regRole, setRegRole] = useState<UserRole>('CEO');
   const [regPin, setRegPin] = useState('');
   const [regConfirmPin, setRegConfirmPin] = useState('');
+  const [regEmployeeCode, setRegEmployeeCode] = useState('');
+  const [regPhone, setRegPhone] = useState('');
   const [showRegPin, setShowRegPin] = useState(false);
 
   // List of registered users
@@ -109,15 +114,33 @@ export default function LoginScreen({
       icon: KeyRound,
       color: 'border-l-amber-500 text-amber-600',
       badge: 'Chỉ đọc (Read-Only)'
+    },
+    Employee: {
+      name: 'Nhân Viên',
+      desc: 'Chấm công, điểm danh và xem bảng lương cá nhân',
+      correctPin: '5555',
+      icon: UserCheck,
+      color: 'border-l-cyan-500 text-cyan-600',
+      badge: 'Cổng Nhân viên'
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
     if (loginType === 'default') {
       const config = roleConfig[selectedRole];
+      if (serverMode) {
+        const usernames: Record<UserRole, string> = { CEO: 'ceo', Accountant: 'ketoan', SiteManager: 'chihuy', Auditor: 'kiemtoan', Employee: 'nhanvien' };
+        try {
+          const { user } = await apiLogin(usernames[selectedRole], pin);
+          onLoginSuccess(user.role, user.fullName, user.employeeId);
+        } catch (error) {
+          setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
+        }
+        return;
+      }
       if (pin === config.correctPin) {
         onLoginSuccess(selectedRole);
       } else {
@@ -145,7 +168,7 @@ export default function LoginScreen({
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -165,6 +188,18 @@ export default function LoginScreen({
     // Check spaces or special chars
     if (/\s/.test(cleanUsername)) {
       setErrorMsg('Tên đăng nhập không được chứa khoảng trắng.');
+      return;
+    }
+
+    if (serverMode) {
+      if (!/^\d{6,12}$/.test(regPin)) { setErrorMsg('PIN đăng ký phải có 6–12 chữ số.'); return; }
+      if (regPin !== regConfirmPin) { setErrorMsg('Xác nhận mã PIN không trùng khớp.'); return; }
+      try {
+        const { user } = await apiRegister(cleanUsername, regEmployeeCode.trim(), regPhone, regPin);
+        onLoginSuccess(user.role, user.fullName, user.employeeId);
+      } catch (error) {
+        setErrorMsg(error instanceof Error ? error.message : 'Không đăng ký được tài khoản.');
+      }
       return;
     }
 
@@ -285,7 +320,7 @@ export default function LoginScreen({
               >
                 Vai trò mặc định
               </button>
-              <button
+              {!serverMode && <button
                 type="button"
                 onClick={() => {
                   setLoginType('personal');
@@ -302,7 +337,7 @@ export default function LoginScreen({
                 }`}
               >
                 Tài khoản cá nhân ({registeredUsers.length})
-              </button>
+              </button>}
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
@@ -417,14 +452,14 @@ export default function LoginScreen({
                       Nhập mã khóa PIN xác thực
                     </label>
                     <span className="text-[9px] font-mono text-slate-500">
-                      Yêu cầu 4 chữ số
+                      {serverMode ? 'PIN bảo mật 6–12 chữ số' : 'Yêu cầu 4 chữ số'}
                     </span>
                   </div>
 
                   <div className="relative">
                     <input
                       type={showPin ? 'text' : 'password'}
-                      maxLength={4}
+                      maxLength={serverMode ? 12 : 4}
                       value={pin}
                       onChange={(e) => {
                         setPin(e.target.value.replace(/\D/g, ''));
@@ -511,6 +546,9 @@ export default function LoginScreen({
               <span className="text-[9px] text-slate-500 block">Viết liền, không dấu, ít nhất 3 ký tự, dùng để đăng nhập.</span>
             </div>
 
+            {serverMode && <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Mã nhân viên *</label><input className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regEmployeeCode} onChange={e=>setRegEmployeeCode(e.target.value)} placeholder="emp-17 hoặc mã NV" required/></div><div className="space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Số điện thoại hồ sơ *</label><input className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regPhone} onChange={e=>setRegPhone(e.target.value.replace(/\D/g,''))} placeholder="0961001001" required/></div></div>}
+
+            {!serverMode && <>
             {/* Full Name */}
             <div className="space-y-1">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
@@ -543,6 +581,7 @@ export default function LoginScreen({
               </select>
               <span className="text-[9px] text-slate-500 block">Vai trò quyết định phân quyền truy cập các mô-đun trong app.</span>
             </div>
+            </>}
 
             {/* Pin Code & Confirm PIN Grid */}
             <div className="grid grid-cols-2 gap-3 pt-1">
@@ -555,7 +594,7 @@ export default function LoginScreen({
                 <div className="relative">
                   <input
                     type={showRegPin ? 'text' : 'password'}
-                    maxLength={4}
+                    maxLength={serverMode ? 12 : 4}
                     value={regPin}
                     onChange={(e) => setRegPin(e.target.value.replace(/\D/g, ''))}
                     placeholder="••••"
@@ -570,7 +609,7 @@ export default function LoginScreen({
                     {showRegPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <span className="text-[8px] text-slate-500 block">4 chữ số tự chọn</span>
+                <span className="text-[8px] text-slate-500 block">{serverMode ? '6–12 chữ số tự chọn' : '4 chữ số tự chọn'}</span>
               </div>
 
               <div className="space-y-1">
@@ -579,7 +618,7 @@ export default function LoginScreen({
                 </label>
                 <input
                   type={showRegPin ? 'text' : 'password'}
-                  maxLength={4}
+                  maxLength={serverMode ? 12 : 4}
                   value={regConfirmPin}
                   onChange={(e) => setRegConfirmPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
