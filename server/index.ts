@@ -91,6 +91,25 @@ function mergeSiteManagerPayload(current: JsonRecord, incoming: JsonRecord, proj
   return result;
 }
 
+function changedPeriods(beforeValue: unknown, afterValue: unknown, applies: (item: JsonRecord) => boolean = () => true) {
+  const beforeRows = Array.isArray(beforeValue) ? beforeValue : [];
+  const afterRows = Array.isArray(afterValue) ? afterValue : [];
+  const key = (item: JsonRecord, index: number) => String(item.id || `${item.employeeId || ''}:${item.projectId || ''}:${item.date || ''}:${index}`);
+  const before = new Map(beforeRows.map((item: JsonRecord, index: number) => [key(item, index), item]));
+  const after = new Map(afterRows.map((item: JsonRecord, index: number) => [key(item, index), item]));
+  const periods = new Set<string>();
+  const record = (item?: JsonRecord) => {
+    if (!item || !applies(item) || !/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(String(item.date || ''))) return;
+    periods.add(String(item.date).slice(0, 7));
+  };
+  for (const [id, item] of after) {
+    const previous = before.get(id);
+    if (JSON.stringify(previous) !== JSON.stringify(item)) { record(previous); record(item); }
+  }
+  for (const [id, item] of before) if (!after.has(id)) record(item);
+  return [...periods];
+}
+
 async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
   const defaultPassword = process.env.SEED_EMPLOYEE_PIN || '5555';
   if (process.env.NODE_ENV === 'production' && defaultPassword.length < 6) {
@@ -416,7 +435,11 @@ app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CE
   const user = res.locals.user as SessionUser;
   const period = String(req.params.period);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'Kỳ lương không hợp lệ.' });
-  const result = await pool.query('INSERT INTO payroll_periods(period,attendance_locked,payroll_locked,locked_by,locked_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(period) DO UPDATE SET attendance_locked=EXCLUDED.attendance_locked,payroll_locked=EXCLUDED.payroll_locked,locked_by=EXCLUDED.locked_by,locked_at=NOW() RETURNING *', [period, Boolean(req.body.attendanceLocked), Boolean(req.body.payrollLocked), user.id]);
+  const attendanceLocked = Boolean(req.body.attendanceLocked);
+  const payrollLocked = Boolean(req.body.payrollLocked);
+  if (payrollLocked && !attendanceLocked) return res.status(400).json({ error: 'Phải khóa bảng công trước khi khóa bảng lương.' });
+  const result = await pool.query('INSERT INTO payroll_periods(period,attendance_locked,payroll_locked,locked_by,locked_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(period) DO UPDATE SET attendance_locked=EXCLUDED.attendance_locked,payroll_locked=EXCLUDED.payroll_locked,locked_by=EXCLUDED.locked_by,locked_at=NOW() RETURNING *', [period, attendanceLocked, payrollLocked, user.id]);
+  await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'payroll_period_lock_changed', { period, attendanceLocked, payrollLocked }]);
   res.json(result.rows[0]);
 });
 
@@ -480,18 +503,9 @@ app.put('/api/state', authenticate, async (req, res) => {
   const currentState = await pool.query('SELECT payload FROM erp_state WHERE id=1');
   const currentPayload = (currentState.rows[0]?.payload || {}) as JsonRecord;
   let permittedPayload = payload;
-  let changedAttendancePeriods: string[] = [];
   if (user.role === 'SiteManager') {
     const projectIds = projectScopeForUser(user, currentPayload);
     if (!projectIds.size) return res.status(403).json({ error: 'Tài khoản Chỉ huy trưởng chưa được gắn với công trường.' });
-    const incomingTimesheets = Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: JsonRecord) => projectIds.has(String(item.projectId))) : [];
-    const currentTimesheets = Array.isArray(currentPayload.timesheets) ? currentPayload.timesheets.filter((item: JsonRecord) => projectIds.has(String(item.projectId))) : [];
-    const before = new Map<string, JsonRecord>(currentTimesheets.map((item: JsonRecord) => [String(item.id), item]));
-    const after = new Map<string, JsonRecord>(incomingTimesheets.map((item: JsonRecord) => [String(item.id), item]));
-    const changedDates = new Set<string>();
-    for (const [id, item] of after) if (JSON.stringify(before.get(id)) !== JSON.stringify(item)) changedDates.add(String(item.date || ''));
-    for (const [id, item] of before) if (!after.has(id)) changedDates.add(String(item.date || ''));
-    changedAttendancePeriods = [...changedDates].filter(Boolean).map(date => date.slice(0, 7));
     permittedPayload = mergeSiteManagerPayload(currentPayload, payload, projectIds);
   }
   if (user.role === 'Employee') {
@@ -502,10 +516,17 @@ app.put('/api/state', authenticate, async (req, res) => {
     const employee = employees.find((item: JsonRecord) => item.id === user.employeeId);
     const project = projects.find((item: JsonRecord) => item.id === employee?.projectId);
     if (!employee || !project) return res.status(403).json({ error: 'Hồ sơ nhân viên chưa được phân công công trường.' });
+    const projectLatitude = Number(project.latitude);
+    const projectLongitude = Number(project.longitude);
+    const geofenceRadius = Number(project.geofenceRadius || 200);
+    if (!Number.isFinite(projectLatitude) || projectLatitude < -90 || projectLatitude > 90 || !Number.isFinite(projectLongitude) || projectLongitude < -180 || projectLongitude > 180 || !Number.isFinite(geofenceRadius) || geofenceRadius < 25 || geofenceRadius > 5000) {
+      return res.status(409).json({ error: 'Công trường chưa được cấu hình geofence hợp lệ.' });
+    }
     let ownTimesheets = Array.isArray(payload.timesheets)
       ? payload.timesheets.filter((item: { employeeId?: string; date?: string }) => item.employeeId === user.employeeId && item.date === today)
       : [];
     const hasPhoto = ownTimesheets.some((item: JsonRecord) => Boolean(item.attendancePhoto));
+    if (ownTimesheets.some((item: JsonRecord) => typeof item.attendancePhoto === 'string' && item.attendancePhoto.length > 2_200_000)) return res.status(413).json({ error: 'Ảnh chấm công vượt quá dung lượng cho phép.' });
     if (hasPhoto) {
       const consent = await pool.query('SELECT attendance_photo_consent FROM privacy_consents WHERE employee_id=$1', [user.employeeId]);
       if (!consent.rows[0]?.attendance_photo_consent) return res.status(403).json({ error: 'Bạn chưa đồng ý sử dụng ảnh chấm công.' });
@@ -515,16 +536,20 @@ app.put('/api/state', authenticate, async (req, res) => {
       return !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180;
     });
     if (invalidCoordinates) return res.status(400).json({ error: 'Tọa độ chấm công không hợp lệ.' });
+    let outsideGeofence = false;
     ownTimesheets = ownTimesheets.map((item: JsonRecord) => {
       const latitude = Number(item.latitude);
       const longitude = Number(item.longitude);
       const toRad = (value: number) => value * Math.PI / 180;
-      const dLat = toRad(latitude - Number(project.latitude || 0));
-      const dLon = toRad(longitude - Number(project.longitude || 0));
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(Number(project.latitude || 0))) * Math.cos(toRad(latitude)) * Math.sin(dLon / 2) ** 2;
+      const dLat = toRad(latitude - projectLatitude);
+      const dLon = toRad(longitude - projectLongitude);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(projectLatitude)) * Math.cos(toRad(latitude)) * Math.sin(dLon / 2) ** 2;
       const distance = 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return { ...item, employeeId: user.employeeId, projectId: project.id, gpsStatus: distance <= Number(project.geofenceRadius || 200) ? 'In-Range' : 'Out-Of-Range', verifiedByFace: Boolean(item.attendancePhoto) };
+      const inRange = distance <= geofenceRadius;
+      if (!inRange) outsideGeofence = true;
+      return { ...item, employeeId: user.employeeId, projectId: project.id, gpsStatus: inRange ? 'In-Range' : 'Out-Of-Range', geofenceDistanceMeters: Math.round(distance), geofenceVerifiedAt: new Date().toISOString(), verifiedByFace: Boolean(item.attendancePhoto) };
     });
+    if (outsideGeofence) return res.status(403).json({ error: 'Vị trí hiện tại nằm ngoài geofence của công trường.' });
     permittedPayload = {
       timesheets: [
         ...existingTimesheets.filter((item: { employeeId?: string }) => item.employeeId !== user.employeeId),
@@ -533,11 +558,17 @@ app.put('/api/state', authenticate, async (req, res) => {
       ],
     };
   }
-  if (user.role === 'Employee') changedAttendancePeriods = [new Date().toISOString().slice(0, 7)];
-  if (changedAttendancePeriods.length && !['CEO', 'Accountant'].includes(user.role)) {
-    const periods = [...new Set(changedAttendancePeriods)];
-    const lock = await pool.query('SELECT period FROM payroll_periods WHERE period=ANY($1::text[]) AND attendance_locked=TRUE', [periods]);
-    if (lock.rowCount) return res.status(423).json({ error: `Bảng công tháng ${lock.rows[0].period} đã khóa.` });
+  const nextTimesheets = Array.isArray(permittedPayload.timesheets) ? permittedPayload.timesheets : currentPayload.timesheets;
+  const nextTransactions = Array.isArray(permittedPayload.transactions) ? permittedPayload.transactions : currentPayload.transactions;
+  const changedAttendancePeriods = changedPeriods(currentPayload.timesheets, nextTimesheets);
+  const changedPayrollPeriods = changedPeriods(currentPayload.transactions, nextTransactions, item => item.category === 'Labor');
+  if (changedAttendancePeriods.length) {
+    const lock = await pool.query('SELECT period,attendance_locked,payroll_locked FROM payroll_periods WHERE period=ANY($1::text[]) AND (attendance_locked=TRUE OR payroll_locked=TRUE) LIMIT 1', [changedAttendancePeriods]);
+    if (lock.rowCount) return res.status(423).json({ error: `Kỳ công/lương tháng ${lock.rows[0].period} đã khóa.` });
+  }
+  if (changedPayrollPeriods.length) {
+    const lock = await pool.query('SELECT period FROM payroll_periods WHERE period=ANY($1::text[]) AND payroll_locked=TRUE LIMIT 1', [changedPayrollPeriods]);
+    if (lock.rowCount) return res.status(423).json({ error: `Bảng lương tháng ${lock.rows[0].period} đã khóa.` });
   }
   const result = await pool.query(
     `UPDATE erp_state SET payload=payload || $1::jsonb, revision=revision+1, updated_by=$2, updated_at=NOW()

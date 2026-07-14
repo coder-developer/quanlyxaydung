@@ -87,22 +87,10 @@ export default function App() {
 
   const handleLogout = useCallback(() => {
     apiLogout();
-    localStorage.removeItem('erp_is_logged_in');
-    localStorage.removeItem('erp_current_user_role');
-    localStorage.removeItem('erp_current_user_name');
-    localStorage.removeItem('erp_current_employee_id');
-    if (serverMode) {
-      for (const key of [
-        'erp_company_config', 'erp_projects', 'erp_employees', 'erp_contractors', 'erp_contracts',
-        'erp_inventory_items', 'erp_material_limits', 'erp_inventory_ledger', 'erp_timesheets',
-        'erp_equipment', 'erp_approvals', 'erp_transactions', 'erp_labor_contracts',
-        'erp_construction_tasks', 'erp_registered_users',
-      ]) localStorage.removeItem(key);
-    }
     setCurrentUserFullName(null);
     setCurrentEmployeeId(null);
     setIsLoggedIn(false);
-  }, [serverMode]);
+  }, []);
 
   useEffect(() => {
     window.addEventListener('erp:session-expired', handleLogout);
@@ -234,6 +222,7 @@ export default function App() {
 
   // --- PERSISTENCE EFFECT ---
   useEffect(() => {
+    if (!isLoggedIn) return;
     localStorage.setItem('erp_autosave_enabled', String(autoSaveEnabled));
     if (autoSaveEnabled) {
       localStorage.setItem('erp_company_config', JSON.stringify(companyConfig));
@@ -252,6 +241,7 @@ export default function App() {
       localStorage.setItem('erp_construction_tasks', JSON.stringify(constructionTasks));
     }
   }, [
+    isLoggedIn,
     autoSaveEnabled,
     companyConfig,
     projects,

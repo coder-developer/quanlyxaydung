@@ -804,6 +804,7 @@ export default function HRManager({
       // Find cash advances already disbursed to this employee in this month
       const advances = transactions
         .filter(tx => tx.projectId === emp.projectId &&
+                      tx.date.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`) &&
                       tx.category === 'Labor' &&
                       tx.description.toLowerCase().includes('tạm ứng') &&
                       tx.description.toLowerCase().includes(emp.name.toLowerCase()))
@@ -812,6 +813,7 @@ export default function HRManager({
       // Paid salaries
       const salariesPaid = transactions
         .filter(tx => tx.projectId === emp.projectId &&
+                      tx.date.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`) &&
                       tx.category === 'Labor' &&
                       tx.description.toLowerCase().includes('chi lương') &&
                       tx.description.toLowerCase().includes(emp.name.toLowerCase()))
