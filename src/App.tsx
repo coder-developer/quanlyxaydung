@@ -28,6 +28,7 @@ import { readStoredJson } from './lib/storage';
 import { apiLogout, fetchServerRevision, fetchServerState, hasApiSession, saveServerState } from './lib/api';
 
 const DashboardView = lazy(() => import('./components/DashboardView'));
+const ProjectManager = lazy(() => import('./components/ProjectManager'));
 const SchemaExplorer = lazy(() => import('./components/SchemaExplorer'));
 const FlowSimulator = lazy(() => import('./components/FlowSimulator'));
 const OpsSimulator = lazy(() => import('./components/OpsSimulator'));
@@ -47,7 +48,7 @@ import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, HelpCir
 
 export default function App() {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'schema' | 'flows' | 'sim' | 'liabilities' | 'hr' | 'workforce' | 'masterdata' | 'warehouse' | 'equipment' | 'journal' | 'company' | 'drive'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'schema' | 'flows' | 'sim' | 'liabilities' | 'hr' | 'workforce' | 'masterdata' | 'warehouse' | 'equipment' | 'journal' | 'company' | 'drive'>('dashboard');
 
   // --- CURRENT ROLE FOR ROLE-BASED ACCESS CONTROL (RBAC) ---
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
@@ -1044,6 +1045,13 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => handleTabClick('projects', 'Quản lý dự án')}
+            className={`flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'projects' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+          >
+            <div className="flex items-center gap-2.5 md:gap-3"><Building2 className="w-4 h-4 shrink-0"/><span>Quản lý dự án</span></div>
+          </button>
+
+          <button
             onClick={() => handleTabClick('company', 'Thông tin Doanh nghiệp & Phiếu in')}
             className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'company'
@@ -1240,6 +1248,7 @@ export default function App() {
           <div className="shrink-0">
             <h1 className="text-xs md:text-sm lg:text-base font-black text-slate-800 tracking-tight flex items-center gap-1.5 md:gap-2">
               {activeTab === 'dashboard' && '📊 Bảng Điều Khiển Tài Chính & P&L Công Trường'}
+              {activeTab === 'projects' && '🏗️ Quản Lý Dự Án & Công Trường'}
               {activeTab === 'journal' && '📖 Sổ Nhật Ký Chung Kế Toán Chuẩn Thông Tư 200'}
               {activeTab === 'liabilities' && '💳 Quản Lý Công Nợ, Thầu Phụ & Chủ Đầu Tư'}
               {activeTab === 'schema' && '🗄️ Kiến Trúc Hệ Cơ Sở Dữ Liệu Quan Hệ (ERD)'}
@@ -1253,7 +1262,7 @@ export default function App() {
               {activeTab === 'company' && '🏢 Cấu Hình Thông Tin Doanh Nghiệp & Tiêu Đề Phiếu In'}
             </h1>
             <p className="text-[9px] md:text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-0.5">
-              Hệ thống quản lý thời gian thực • 5 Công trường hoạt động
+              Hệ thống quản lý thời gian thực • {projects.length} Công trường
             </p>
           </div>
 
@@ -1466,7 +1475,7 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">DỰ ÁN LIÊN KẾT</p>
-                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">5 Công trình</h2>
+                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">{projects.length} Công trình</h2>
                   <p className="text-[10px] text-slate-400 mt-1">Delta / Coteccons / Self-Perform</p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
@@ -1508,6 +1517,10 @@ export default function App() {
                   globalSearchQuery={globalSearchQuery}
                   companyConfig={companyConfig}
                 />
+              )}
+
+              {activeTab === 'projects' && (
+                <ProjectManager projects={projects} setProjects={securedSetProjectsCEO} role={currentUserRole} />
               )}
 
               {activeTab === 'liabilities' && (
