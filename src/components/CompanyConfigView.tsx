@@ -210,7 +210,7 @@ export default function CompanyConfigView({
             {/* Section 1: Thông tin pháp nhân */}
             <div>
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-1.5">
-                II. Thông tin Doanh nghiệp & Ban điều hành
+                II. Thông tin Doanh nghiệp
               </h3>
               <div className="grid grid-cols-1 gap-4">
                 <div>

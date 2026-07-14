@@ -1,6 +1,7 @@
 import { useMemo, useState, type Dispatch, type FormEvent, type ReactElement, type SetStateAction } from 'react';
 import { Building2, CalendarDays, Edit3, MapPin, Plus, Search, ShieldCheck, Wallet, X } from 'lucide-react';
 import type { Project, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 
 interface Props {
   projects: Project[];
@@ -82,10 +83,11 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
   const save = (event: FormEvent) => {
     event.preventDefault();
     if (!canEdit) return;
-    const code = String(form.code || '').trim().toUpperCase();
+    const rawCode = String(form.code || '').trim();
+    const code = normalizeBusinessId(rawCode, 'DA-001');
     const name = form.name.trim();
     const location = form.location.trim();
-    if (!code || !name || !location || !form.startDate || !form.endDate) {
+    if (!rawCode || !name || !location || !form.startDate || !form.endDate) {
       setError('Vui lòng nhập mã, tên, địa điểm và thời gian dự án.');
       return;
     }
@@ -114,7 +116,7 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
       setProjects(current => current.map(project => project.id === editingId ? { ...project, ...values } : project));
       setNotice('Đã cập nhật dự án và chờ đồng bộ.');
     } else {
-      setProjects(current => [...current, { id: `proj-${crypto.randomUUID()}`, ...values }]);
+      setProjects(current => [...current, { id: code, ...values }]);
       setNotice('Đã tạo dự án mới và chờ đồng bộ.');
     }
     closeForm();

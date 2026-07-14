@@ -25,6 +25,7 @@ export async function apiRegister(username: string, employeeCode: string, phone:
 }
 
 export const apiChangePin = (currentPin: string, newPin: string) => apiFetch('/api/auth/change-pin', { method: 'POST', body: JSON.stringify({ currentPin, newPin }) }) as Promise<{ success: boolean }>;
+export const syncServerBusinessIds = (mappings: Array<{ entityType: string; oldId: string; newId: string }>) => apiFetch('/api/admin/sync-business-ids', { method: 'POST', body: JSON.stringify({ mappings }) }) as Promise<{ success: boolean }>;
 
 export function apiLogout() { localStorage.removeItem(TOKEN_KEY); }
 export function hasApiSession() { return Boolean(localStorage.getItem(TOKEN_KEY)); }

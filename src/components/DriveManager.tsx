@@ -37,6 +37,7 @@ import { Project } from '../types';
 
 interface DriveManagerProps {
   projects: Project[];
+  backupData: unknown;
 }
 
 interface DriveFile {
@@ -57,7 +58,7 @@ interface Breadcrumb {
 const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(firebaseApp);
 
-export default function DriveManager({ projects }: DriveManagerProps) {
+export default function DriveManager({ projects, backupData }: DriveManagerProps) {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -121,10 +122,8 @@ export default function DriveManager({ projects }: DriveManagerProps) {
     setLoadingAuth(true);
     const provider = new GoogleAuthProvider();
     
-    // Add all scopes needed for Google Drive
-    provider.addScope('https://www.googleapis.com/auth/drive');
+    // Chỉ quản lý các tệp do ứng dụng tạo hoặc người dùng chọn, không xin toàn quyền Drive.
     provider.addScope('https://www.googleapis.com/auth/drive.file');
-    provider.addScope('https://www.googleapis.com/auth/drive.metadata');
 
     try {
       const result = await signInWithPopup(auth, provider);
@@ -311,6 +310,12 @@ export default function DriveManager({ projects }: DriveManagerProps) {
       setUploading(false);
       setUploadProgress('');
     }
+  };
+
+  const handleBackupErp = async () => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const payload = JSON.stringify({ version: '2.0', exportedAt: new Date().toISOString(), data: backupData }, null, 2);
+    await uploadFile(new File([payload], `CONSTRUCT-OS-Backup-${timestamp}.json`, { type: 'application/json' }));
   };
 
   // File Drag & Drop Handlers
@@ -640,6 +645,15 @@ export default function DriveManager({ projects }: DriveManagerProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleBackupErp}
+            disabled={uploading}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            title="Lưu một bản sao đầy đủ dữ liệu ERP vào thư mục Google Drive hiện tại"
+          >
+            <HardDrive className="w-4 h-4" />
+            <span>Sao lưu dữ liệu ERP</span>
+          </button>
           {/* Setup ERP Directory Button */}
           <button
             onClick={handleSetupErpDirectory}

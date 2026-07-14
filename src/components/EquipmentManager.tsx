@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Project, Equipment, FinancialTransaction, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 import { 
   Wrench, Truck, AlertCircle, Plus, ClipboardList, CheckCircle2, 
   MapPin, HelpCircle, Activity, Gauge, Calendar, DollarSign, PenSquare,
@@ -836,8 +837,12 @@ export default function EquipmentManager({
     const matchedProj = projects.find(p => p.id === procureProject);
     if (!matchedProj) return;
 
-    const uniqueId = `eq-${equipment.length + 1}`;
-    const generatedCode = procureCode || `TB-${(equipment.length + 1).toString().padStart(3, '0')}`;
+    const generatedCode = normalizeBusinessId(procureCode || `TB-${(equipment.length + 1).toString().padStart(3, '0')}`, `TB-${(equipment.length + 1).toString().padStart(3, '0')}`);
+    if (equipment.some(item => item.id === generatedCode || item.code === generatedCode)) {
+      alert(`Mã thiết bị ${generatedCode} đã tồn tại.`);
+      return;
+    }
+    const uniqueId = generatedCode;
     
     // 1. Add equipment to registry list
     const newEq: Equipment = {

@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Contractor, Contract, FinancialTransaction, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -306,6 +307,7 @@ export default function LiabilitiesManager({
   const [showRecordVolumeModal, setShowRecordVolumeModal] = useState(false);
 
   // New Partner Form
+  const [newPartnerCode, setNewPartnerCode] = useState('');
   const [newPartnerName, setNewPartnerName] = useState('');
   const [newPartnerType, setNewPartnerType] = useState<'Subcontractor' | 'Supplier' | 'Client'>('Subcontractor');
   const [newPartnerContact, setNewPartnerContact] = useState('');
@@ -1219,12 +1221,16 @@ export default function LiabilitiesManager({
   // Add Partner handler
   const handleAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerName.trim() || !newPartnerContact.trim() || !newPartnerPhone.trim()) {
+    if (!newPartnerCode.trim() || !newPartnerName.trim() || !newPartnerContact.trim() || !newPartnerPhone.trim()) {
       alert('Vui lòng điền đầy đủ các trường thông tin đối tác!');
       return;
     }
 
-    const newId = `partner-${Date.now()}`;
+    const newId = normalizeBusinessId(newPartnerCode, `DT-${String(contractors.length + 1).padStart(3, '0')}`);
+    if (contractors.some(item => item.id === newId || item.code === newId) || clients.some(item => item.id === newId)) {
+      alert(`Mã đối tác ${newId} đã tồn tại.`);
+      return;
+    }
     if (newPartnerType === 'Client') {
       const newClientObj: Client = {
         id: newId,
@@ -1238,6 +1244,7 @@ export default function LiabilitiesManager({
     } else {
       const newContractorObj: Contractor = {
         id: newId,
+        code: newId,
         name: newPartnerName,
         type: newPartnerType,
         contactPerson: newPartnerContact,
@@ -1250,6 +1257,7 @@ export default function LiabilitiesManager({
     }
 
     // Reset Form
+    setNewPartnerCode('');
     setNewPartnerName('');
     setNewPartnerContact('');
     setNewPartnerPhone('');
@@ -1265,9 +1273,14 @@ export default function LiabilitiesManager({
       return;
     }
 
+    const contractBusinessId = normalizeBusinessId(newContractNo, `HD-${Date.now()}`);
+    if (contracts.some(item => item.id === contractBusinessId || item.contractNumber === contractBusinessId)) {
+      alert(`Số hợp đồng ${contractBusinessId} đã tồn tại.`);
+      return;
+    }
     const newContract: Contract = {
-      id: `ct-new-${Date.now()}`,
-      contractNumber: newContractNo,
+      id: contractBusinessId,
+      contractNumber: contractBusinessId,
       title: newContractTitle,
       projectId: newContractProjectId,
       partnerId: newContractPartnerId,
@@ -2309,6 +2322,17 @@ export default function LiabilitiesManager({
               </button>
             </div>
             <form onSubmit={handleAddPartner} className="p-5 space-y-4 text-xs font-semibold">
+              <div>
+                <label className="text-slate-400 block mb-1">Mã đối tác = ID nội bộ *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: DT-006"
+                  value={newPartnerCode}
+                  onChange={(e) => setNewPartnerCode(e.target.value.toUpperCase())}
+                  className="w-full p-2 border border-slate-200 rounded-lg font-bold uppercase"
+                />
+              </div>
               <div>
                 <label className="text-slate-400 block mb-1">Tên Đơn vị Đối tác *</label>
                 <input

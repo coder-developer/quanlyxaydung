@@ -20,6 +20,7 @@ import {
   FileText
 } from 'lucide-react';
 import { InventoryItem, InventoryLedger, MaterialLimit, Project, FinancialTransaction, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 
 interface WarehouseManagerProps {
   projects: Project[];
@@ -120,10 +121,13 @@ export default function WarehouseManager({
       return;
     }
 
-    const generatedId = `item-${Date.now().toString().slice(-4)}`;
-    const generatedCode = newItem.code || `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`;
+    const generatedCode = normalizeBusinessId(newItem.code || `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`, `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`);
+    if (inventoryItems.some(item => item.id === generatedCode || item.code === generatedCode)) {
+      showToast(`Mã vật tư ${generatedCode} đã tồn tại.`);
+      return;
+    }
     const createdItem: InventoryItem = {
-      id: generatedId,
+      id: generatedCode,
       code: generatedCode,
       name: newItem.name,
       unit: newItem.unit,
@@ -134,7 +138,7 @@ export default function WarehouseManager({
     };
 
     setInventoryItems(prev => [...prev, createdItem]);
-    setVoucher(prev => ({ ...prev, itemId: generatedId })); // Auto-select the newly registered item
+    setVoucher(prev => ({ ...prev, itemId: generatedCode })); // Auto-select the newly registered item
     showToast(`Đã thêm mã vật tư mới thành công: ${newItem.name} (${generatedCode})`);
     setShowAddItemModal(false);
     setNewItem({ code: '', name: '', unit: '', avgCost: 100000, initialQty: 0 });

@@ -99,6 +99,40 @@ app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => 
   res.json({ success: true });
 });
 
+app.post('/api/admin/sync-business-ids', authenticate, requireRoles('CEO', 'Accountant'), async (req, res) => {
+  const mappings = Array.isArray(req.body.mappings) ? req.body.mappings.slice(0, 500) : [];
+  const valid = mappings.every((item: any) => ['project', 'employee', 'contractor', 'contract', 'inventory', 'equipment'].includes(item.entityType)
+    && /^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(String(item.oldId || '').toUpperCase())
+    && /^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(String(item.newId || '').toUpperCase()));
+  if (!mappings.length || !valid) return res.status(400).json({ error: 'Danh sách đổi ID không hợp lệ.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of mappings) {
+      if (item.entityType === 'employee') {
+        await client.query('UPDATE app_users SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        await client.query('UPDATE workforce_requests SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        await client.query('UPDATE work_shifts SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        await client.query('UPDATE notifications SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        await client.query('UPDATE payslip_views SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        await client.query('UPDATE privacy_consents SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+      }
+      if (item.entityType === 'project') {
+        await client.query('UPDATE work_shifts SET project_id=$1 WHERE project_id=$2', [item.newId, item.oldId]);
+      }
+    }
+    await client.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'business_ids_synced', { count: mappings.length }]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    res.status(409).json({ error: 'Không thể đổi ID vì mã mới đang được sử dụng trong dữ liệu liên quan.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/admin/users', authenticate, requireRoles('CEO'), async (_req, res) => {
   const result = await pool.query('SELECT id,username,full_name,role,employee_id,active,created_at FROM app_users ORDER BY created_at DESC');
   res.json(result.rows);
@@ -281,7 +315,7 @@ const seeds: Array<[string, string, Role, string, string?]> = [
   ['ketoan', 'Kế toán trưởng', 'Accountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
   ['chihuy', 'Chỉ huy trưởng', 'SiteManager', process.env.SEED_SITE_MANAGER_PIN || '3333'],
   ['kiemtoan', 'Kiểm toán viên', 'Auditor', process.env.SEED_AUDITOR_PIN || '4444'],
-  ['nhanvien', 'Nguyễn Văn Mạnh', 'Employee', process.env.SEED_EMPLOYEE_PIN || '5555', 'emp-1'],
+  ['nhanvien', 'Nguyễn Văn Mạnh', 'Employee', process.env.SEED_EMPLOYEE_PIN || '5555', 'NV-001'],
 ];
 for (const [username, fullName, role, pin, employeeId] of seeds) {
   if (process.env.NODE_ENV === 'production' && (!pin || pin === 'CHANGE_ME' || pin.length < 6)) {

@@ -25,7 +25,8 @@ import { Project, Employee, Contractor, Contract, InventoryItem, MaterialLimit, 
 import LoginScreen from './components/LoginScreen';
 import ChangePinButton from './components/ChangePinButton';
 import { readStoredJson } from './lib/storage';
-import { apiLogout, fetchServerRevision, fetchServerState, hasApiSession, saveServerState } from './lib/api';
+import { apiLogout, fetchServerRevision, fetchServerState, hasApiSession, saveServerState, syncServerBusinessIds } from './lib/api';
+import { synchronizeBusinessIds } from './lib/businessIds';
 
 const DashboardView = lazy(() => import('./components/DashboardView'));
 const ProjectManager = lazy(() => import('./components/ProjectManager'));
@@ -433,6 +434,7 @@ export default function App() {
   const lastSyncedPayload = useRef('');
   const syncInFlight = useRef(false);
   const applyingRemotePayload = useRef(false);
+  const businessIdSyncInFlight = useRef(false);
   const [serverReady, setServerReady] = useState(false);
   const [serverSyncError, setServerSyncError] = useState<string | null>(null);
   const [serverSyncStatus, setServerSyncStatus] = useState<'loading' | 'saved' | 'saving' | 'offline' | 'conflict'>('loading');
@@ -538,6 +540,45 @@ export default function App() {
     const timer = window.setInterval(poll, 5000);
     return () => window.clearInterval(timer);
   }, [serverMode, isLoggedIn, serverReady, erpPayload, applyServerPayload]);
+
+  // Mã nghiệp vụ là khóa chính. Khi mã thay đổi, cập nhật toàn bộ quan hệ liên quan theo một lần đồng bộ.
+  useEffect(() => {
+    if (!isLoggedIn || (serverMode && !serverReady) || !['CEO', 'Accountant'].includes(currentUserRole) || businessIdSyncInFlight.current) return;
+    const synchronized = synchronizeBusinessIds({
+      projects, employees, contractors, contracts, inventoryItems, materialLimits,
+      inventoryLedger, timesheets, equipment, approvals, transactions, laborContracts, constructionTasks,
+    });
+    if (!synchronized.changed) return;
+    businessIdSyncInFlight.current = true;
+    const apply = async () => {
+      if (serverMode) await syncServerBusinessIds(synchronized.mappings);
+      const next = synchronized.state;
+      setProjects(next.projects);
+      setEmployees(next.employees);
+      setContractors(next.contractors);
+      setContracts(next.contracts);
+      setInventoryItems(next.inventoryItems);
+      setMaterialLimits(next.materialLimits);
+      setInventoryLedger(next.inventoryLedger);
+      setTimesheets(next.timesheets);
+      setEquipment(next.equipment);
+      setApprovals(next.approvals);
+      setTransactions(next.transactions);
+      setLaborContracts(next.laborContracts);
+      setConstructionTasks(next.constructionTasks);
+      setCurrentEmployeeId(current => {
+        const replacement = synchronized.mappings.find(item => item.entityType === 'employee' && item.oldId === current)?.newId || current;
+        if (replacement) localStorage.setItem('erp_current_employee_id', replacement);
+        return replacement;
+      });
+      setServerSyncError(null);
+    };
+    apply().catch(error => {
+      setServerSyncError(error instanceof Error ? error.message : 'Không thể đồng bộ mã nghiệp vụ và ID nội bộ.');
+    }).finally(() => {
+      businessIdSyncInFlight.current = false;
+    });
+  }, [isLoggedIn, serverMode, serverReady, currentUserRole, projects, employees, contractors, contracts, inventoryItems, materialLimits, inventoryLedger, timesheets, equipment, approvals, transactions, laborContracts, constructionTasks]);
 
   const handleExportBackup = useCallback(() => {
     const backup = {
@@ -1052,7 +1093,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => handleTabClick('company', 'Thông tin Doanh nghiệp & Phiếu in')}
+            onClick={() => handleTabClick('company', 'Thông tin Doanh nghiệp')}
             className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'company'
                 ? 'bg-blue-600 text-white shadow-xs'
@@ -1063,7 +1104,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2.5 md:gap-3">
               <Building2 className="w-4 h-4 text-sky-400 shrink-0" />
-              <span>Thông tin Doanh nghiệp & Phiếu in</span>
+              <span>Thông tin Doanh nghiệp</span>
             </div>
             {isTabRestricted('company') && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
           </button>
@@ -1653,7 +1694,7 @@ export default function App() {
               )}
 
               {activeTab === 'drive' && (
-                <DriveManager projects={projects} />
+                <DriveManager projects={projects} backupData={erpPayload} />
               )}
             </div>
 

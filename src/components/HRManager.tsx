@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Employee, Project, Timesheet, FinancialTransaction, LaborContract, ConstructionTask, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 
 interface HRManagerProps {
   projects: Project[];
@@ -251,22 +252,25 @@ export default function HRManager({
       showToast('Vui lòng điền đầy đủ các trường thông tin bắt buộc.');
       return;
     }
+    const employeeCode = normalizeBusinessId(newEmp.code || `NV-${(employees.length + 1).toString().padStart(3, '0')}`, `NV-${(employees.length + 1).toString().padStart(3, '0')}`);
+    if (employees.some(emp => emp.id !== editingEmp?.id && (emp.id === employeeCode || emp.code === employeeCode))) {
+      showToast(`Mã nhân viên ${employeeCode} đã tồn tại.`);
+      return;
+    }
 
     if (editingEmp) {
       // Edit mode
-      setEmployees(prev => prev.map(emp => emp.id === editingEmp.id ? { ...emp, ...newEmp } : emp));
+      setEmployees(prev => prev.map(emp => emp.id === editingEmp.id ? { ...emp, ...newEmp, code: employeeCode } : emp));
       showToast(`Đã cập nhật thông tin nhân viên ${newEmp.name} thành công.`);
     } else {
       // Create mode
-      const generatedId = `emp-${Date.now().toString().slice(-4)}`;
-      const generatedCode = newEmp.code || `NV-${(employees.length + 1).toString().padStart(3, '0')}`;
       const createdEmp: Employee = {
-        id: generatedId,
+        id: employeeCode,
         ...newEmp,
-        code: generatedCode
+        code: employeeCode
       };
       setEmployees(prev => [createdEmp, ...prev]);
-      showToast(`Đã thêm mới nhân viên ${newEmp.name} (Mã số: ${generatedCode}) thành công.`);
+      showToast(`Đã thêm mới nhân viên ${newEmp.name} (Mã số: ${employeeCode}) thành công.`);
     }
 
     setShowAddEmpModal(false);
