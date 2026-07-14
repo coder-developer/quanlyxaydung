@@ -1051,9 +1051,7 @@ export default function App() {
         {/* Brand Header */}
         <div className="p-4 md:p-6 flex items-center justify-between md:justify-start gap-3 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white text-base tracking-wider">
-              {(companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp').substring(0, 1).toUpperCase()}
-            </div>
+            <img src="/app-avatar-192.png" alt="Biểu tượng ứng dụng" className="w-9 h-9 rounded-lg object-cover shadow-lg shadow-blue-500/20 ring-1 ring-white/10" />
             <div className="flex flex-col">
               <span className="text-white font-bold text-sm md:text-base tracking-tight leading-none uppercase">
                 {companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}

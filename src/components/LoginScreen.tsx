@@ -316,9 +316,7 @@ export default function LoginScreen({
       <div className="w-full max-w-xl bg-slate-850/90 border border-slate-750 rounded-2xl shadow-2xl p-6 md:p-8 relative z-10 backdrop-blur-md animate-fade-in" id="login-card">
         {/* Logo / Header block */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white mb-3 shadow-lg shadow-blue-500/20 font-black text-xl tracking-wider">
-            {appTitle.substring(0, 1).toUpperCase()}
-          </div>
+          <img src="/app-avatar-192.png" alt="Biểu tượng Quản Trị Doanh Nghiệp" className="inline-block w-16 h-16 rounded-2xl object-cover mb-3 shadow-xl shadow-blue-500/20 ring-1 ring-white/10" />
           <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white mb-1">
             {appTitle}
           </h2>
