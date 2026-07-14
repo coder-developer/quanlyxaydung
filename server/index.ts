@@ -294,4 +294,8 @@ for (const [username, fullName, role, pin, employeeId] of seeds) {
   );
 }
 
-app.listen(port, '0.0.0.0', () => console.log(`CONSTRUCT-OS listening on :${port}`));
+if (!process.env.VERCEL) {
+  app.listen(port, '0.0.0.0', () => console.log(`CONSTRUCT-OS listening on :${port}`));
+}
+
+export default app;

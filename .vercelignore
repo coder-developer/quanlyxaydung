@@ -1,0 +1,11 @@
+.git/
+.vercel/
+.env
+.env.*
+node_modules/
+dist/
+release/
+backups/
+desktop/
+scripts/build_deployment_guide.py
+*.log
