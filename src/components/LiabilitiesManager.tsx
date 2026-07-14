@@ -803,7 +803,7 @@ export default function LiabilitiesManager({
             @media print { .sheet { max-width: none; } }
           </style>
         </head>
-        <body onload="window.print(); window.close();">
+        <body>
           <main class="sheet">
             <table><tr><td class="head-left"><div class="company">${companyName}</div><div class="address">Địa chỉ: ${companyAddress}</div></td><td class="head-right"><strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br><em>(Ban hành theo chế độ kế toán doanh nghiệp hiện hành)</em></td></tr></table>
             <h1>${voucherTitle}</h1>
@@ -823,6 +823,7 @@ export default function LiabilitiesManager({
       </html>
     `);
     printWindow.document.close();
+    setTimeout(() => printWindow.print(), 250);
   };
 
   const handleExportVoucherExcel = (v: AccountingVoucher) => {

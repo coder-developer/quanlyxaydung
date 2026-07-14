@@ -79,11 +79,11 @@ export default function OpsSimulator({
     onCheckIn(newTimesheet);
 
     if (gpsSetting === 'valid' && faceCheck) {
-      setCheckInLog(`✅ [CHẤM CÔNG THÀNH CÔNG] Công nhân ${currentEmp.name} đã check-in thành công tại dự án "${assignedProj.name}". Tọa độ hợp lệ, khớp khuôn mặt 98%!`);
+      setCheckInLog(`✅ [CHẤM CÔNG THÀNH CÔNG] Công nhân ${currentEmp.name} đã check-in thành công tại dự án "${assignedProj.name}". Tọa độ hợp lệ và đã có ảnh xác minh.`);
     } else if (gpsSetting === 'invalid') {
       setCheckInLog(`⚠️ [CẢNH BÁO GEOLOCATION] Phát hiện công nhân ${currentEmp.name} chấm công ngoài phạm vi cho phép của dự án (Cách dự án 4.2 km). Log chấm công được gắn cờ Out-of-Range!`);
     } else {
-      setCheckInLog(`❌ [LỖI XÁC THỰC] Chấm công bị gắn cờ cảnh báo do không vượt qua bước nhận diện AI khuôn mặt (FaceID không khớp).`);
+      setCheckInLog(`❌ [LỖI XÁC THỰC] Chấm công bị gắn cờ vì chưa có ảnh xác minh.`);
     }
   };
 
@@ -185,7 +185,7 @@ export default function OpsSimulator({
               </div>
             </div>
 
-            {/* AI Face check option */}
+            {/* Attendance photo option */}
             <div className="flex items-center gap-2 py-1">
               <input
                 type="checkbox"
@@ -195,7 +195,7 @@ export default function OpsSimulator({
                 className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
               <label htmlFor="faceCheckCheckbox" className="font-semibold text-gray-700 select-none cursor-pointer">
-                Xác thực khớp khuôn mặt qua AI Face ID (Anti-Fraud)
+                Ghi nhận ảnh xác minh chấm công
               </label>
             </div>
 

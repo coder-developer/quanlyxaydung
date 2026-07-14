@@ -15,7 +15,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
-import { apiLogin, apiRegister } from '../lib/api';
+import { apiChangePin, apiLogin, apiRegister, type ApiUser } from '../lib/api';
 
 interface LoginScreenProps {
   onLoginSuccess: (role: UserRole, fullName?: string, employeeId?: string) => void;
@@ -52,6 +52,10 @@ export default function LoginScreen({
   const [showPin, setShowPin] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pendingPasswordUser, setPendingPasswordUser] = useState<ApiUser | null>(null);
+  const [currentDefaultPassword, setCurrentDefaultPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   // Registration states
   const [regUsername, setRegUsername] = useState('');
@@ -133,14 +137,21 @@ export default function LoginScreen({
     if (loginType === 'default') {
       const config = roleConfig[selectedRole];
       if (serverMode) {
-        const usernames: Record<Exclude<UserRole, 'Employee'>, string> = { CEO: 'ceo', Accountant: 'ketoan', SiteManager: 'chihuy', Auditor: 'kiemtoan' };
-        const username = selectedRole === 'Employee' ? employeeUsername.trim().toLowerCase() : usernames[selectedRole];
+        const usernames: Record<Exclude<UserRole, 'Employee' | 'SiteManager'>, string> = { CEO: 'ceo', Accountant: 'ketoan', Auditor: 'kiemtoan' };
+        const personalRole = selectedRole === 'Employee' || selectedRole === 'SiteManager';
+        const username = personalRole ? employeeUsername.trim().toLowerCase() : usernames[selectedRole];
         if (!username) {
           setErrorMsg('Vui lòng nhập tên đăng nhập nhân viên.');
           return;
         }
         try {
           const { user } = await apiLogin(username, pin);
+          if (user.mustChangePassword) {
+            setPendingPasswordUser(user);
+            setCurrentDefaultPassword(pin);
+            setPin('');
+            return;
+          }
           onLoginSuccess(user.role, user.fullName, user.employeeId);
         } catch (error) {
           setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
@@ -171,6 +182,27 @@ export default function LoginScreen({
       } else {
         setErrorMsg(`Mật khẩu không chính xác cho tài khoản "${user.name}".`);
       }
+    }
+  };
+
+  const handleFirstPasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setErrorMsg(null);
+    if (!pendingPasswordUser) return;
+    if (!/^\d{6,12}$/.test(newPassword) || newPassword === currentDefaultPassword) {
+      setErrorMsg('Mật khẩu mới phải có 6–12 chữ số và khác mật khẩu mặc định.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg('Xác nhận mật khẩu mới không khớp.');
+      return;
+    }
+    try {
+      await apiChangePin(currentDefaultPassword, newPassword);
+      const { user } = await apiLogin(pendingPasswordUser.username, newPassword);
+      onLoginSuccess(user.role, user.fullName, user.employeeId);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Không đổi được mật khẩu.');
     }
   };
 
@@ -259,6 +291,18 @@ export default function LoginScreen({
     setPin('');
     setActiveMode('login');
   };
+
+  if (pendingPasswordUser) return (
+    <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-4 font-sans text-slate-100">
+      <form onSubmit={handleFirstPasswordChange} className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-850 p-6 shadow-2xl space-y-4">
+        <div><h1 className="text-lg font-black">Đổi mật khẩu lần đầu</h1><p className="mt-1 text-xs text-slate-400">{pendingPasswordUser.fullName} • @{pendingPasswordUser.username}</p></div>
+        {errorMsg && <div className="rounded-lg border border-rose-800 bg-rose-950/60 p-3 text-xs font-semibold text-rose-200">{errorMsg}</div>}
+        <input type="password" inputMode="numeric" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value.replace(/\D/g, ''))} placeholder="Mật khẩu mới 6–12 chữ số" className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-bold" required />
+        <input type="password" inputMode="numeric" autoComplete="new-password" value={confirmNewPassword} onChange={event => setConfirmNewPassword(event.target.value.replace(/\D/g, ''))} placeholder="Nhập lại mật khẩu mới" className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-bold" required />
+        <button type="submit" className="w-full rounded-xl bg-blue-600 p-3 text-xs font-black uppercase tracking-wider text-white">Đổi mật khẩu và đăng nhập</button>
+      </form>
+    </div>
+  );
 
   return (
     <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans text-slate-100" id="login-container">
@@ -398,10 +442,10 @@ export default function LoginScreen({
                 </div>
               )}
 
-              {serverMode && loginType === 'default' && selectedRole === 'Employee' && (
+              {serverMode && loginType === 'default' && (selectedRole === 'Employee' || selectedRole === 'SiteManager') && (
                 <div className="space-y-2">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                    Tên đăng nhập nhân viên
+                    {selectedRole === 'SiteManager' ? 'Tên đăng nhập Chỉ huy trưởng' : 'Tên đăng nhập nhân viên'}
                   </label>
                   <input
                     type="text"

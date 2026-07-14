@@ -15,9 +15,81 @@ if (!jwtSecret || jwtSecret.length < 32) throw new Error('JWT_SECRET phải có 
 if (!process.env.DATABASE_URL) throw new Error('Thiếu DATABASE_URL.');
 
 type Role = 'CEO' | 'Accountant' | 'SiteManager' | 'Auditor' | 'Employee';
-type SessionUser = { id: number; username: string; fullName: string; role: Role; employeeId?: string; mustChangePassword?: boolean };
+type SessionUser = { id: number; username: string; fullName: string; role: Role; employeeId?: string; mustChangePassword?: boolean; sessionVersion: number };
 
-type EmployeeAccountSource = { id?: string; code?: string; name?: string; active?: boolean };
+type EmployeeAccountSource = { id?: string; code?: string; name?: string; role?: string; projectId?: string; active?: boolean };
+type JsonRecord = Record<string, any>;
+
+const isSiteManagerEmployee = (employee: EmployeeAccountSource) => String(employee.role || '').toLocaleLowerCase('vi-VN').includes('chỉ huy trưởng');
+
+async function loadErpPayload() {
+  const result = await pool.query('SELECT payload FROM erp_state WHERE id=1');
+  return (result.rows[0]?.payload || {}) as JsonRecord;
+}
+
+function projectScopeForUser(user: SessionUser, payload: JsonRecord) {
+  if (user.role !== 'SiteManager' || !user.employeeId) return new Set<string>();
+  const employees = Array.isArray(payload.employees) ? payload.employees : [];
+  const projects = Array.isArray(payload.projects) ? payload.projects : [];
+  const employee = employees.find((item: EmployeeAccountSource) => item.id === user.employeeId || item.code === user.employeeId);
+  if (!employee || !isSiteManagerEmployee(employee) || employee.active === false) return new Set<string>();
+  const ids = new Set<string>();
+  if (employee.projectId) ids.add(String(employee.projectId));
+  for (const project of projects) {
+    if (String(project.manager || '').trim().toLocaleLowerCase('vi-VN') === String(employee.name || '').trim().toLocaleLowerCase('vi-VN')) ids.add(String(project.id));
+  }
+  return ids;
+}
+
+function filterPayloadForSiteManager(payload: JsonRecord, projectIds: Set<string>) {
+  const inProject = (item: JsonRecord, key = 'projectId') => projectIds.has(String(item?.[key] || ''));
+  const employees = Array.isArray(payload.employees) ? payload.employees.filter((item: JsonRecord) => inProject(item)) : [];
+  const employeeIds = new Set(employees.map((item: JsonRecord) => String(item.id)));
+  const contracts = Array.isArray(payload.contracts) ? payload.contracts.filter((item: JsonRecord) => inProject(item)) : [];
+  const partnerIds = new Set(contracts.map((item: JsonRecord) => String(item.partnerId)));
+  const inventoryLedger = Array.isArray(payload.inventoryLedger) ? payload.inventoryLedger.filter((item: JsonRecord) => inProject(item)) : [];
+  const materialLimits = Array.isArray(payload.materialLimits) ? payload.materialLimits.filter((item: JsonRecord) => inProject(item)) : [];
+  const inventoryIds = new Set([...inventoryLedger, ...materialLimits].map((item: JsonRecord) => String(item.itemId)));
+  const inventoryItems = (Array.isArray(payload.inventoryItems) ? payload.inventoryItems : []).filter((item: JsonRecord) => inventoryIds.has(String(item.id))).map((item: JsonRecord) => {
+    const rows = inventoryLedger.filter((row: JsonRecord) => String(row.itemId) === String(item.id));
+    const received = rows.filter((row: JsonRecord) => row.type === 'Receipt').reduce((sum: number, row: JsonRecord) => sum + Number(row.quantity || 0), 0);
+    const issued = rows.filter((row: JsonRecord) => row.type === 'Issue').reduce((sum: number, row: JsonRecord) => sum + Number(row.quantity || 0), 0);
+    const receivedValue = rows.filter((row: JsonRecord) => row.type === 'Receipt').reduce((sum: number, row: JsonRecord) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+    return { ...item, totalReceived: received, totalIssued: issued, onHand: received - issued, avgCost: received > 0 ? receivedValue / received : Number(item.avgCost || 0) };
+  });
+  return {
+    companyConfig: payload.companyConfig,
+    projects: Array.isArray(payload.projects) ? payload.projects.filter((item: JsonRecord) => projectIds.has(String(item.id))) : [],
+    employees,
+    contractors: Array.isArray(payload.contractors) ? payload.contractors.filter((item: JsonRecord) => partnerIds.has(String(item.id))) : [],
+    contracts,
+    inventoryItems,
+    materialLimits,
+    inventoryLedger,
+    timesheets: Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: JsonRecord) => inProject(item)) : [],
+    equipment: Array.isArray(payload.equipment) ? payload.equipment.filter((item: JsonRecord) => inProject(item, 'currentProjectId')) : [],
+    approvals: Array.isArray(payload.approvals) ? payload.approvals.filter((item: JsonRecord) => inProject(item)) : [],
+    transactions: Array.isArray(payload.transactions) ? payload.transactions.filter((item: JsonRecord) => inProject(item)) : [],
+    laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: JsonRecord) => employeeIds.has(String(item.employeeId))) : [],
+    constructionTasks: Array.isArray(payload.constructionTasks) ? payload.constructionTasks.filter((item: JsonRecord) => inProject(item)) : [],
+  };
+}
+
+function mergeScopedRows(existing: any, incoming: any, belongsToScope: (item: JsonRecord) => boolean) {
+  const current = Array.isArray(existing) ? existing : [];
+  const updates = Array.isArray(incoming) ? incoming.filter(belongsToScope) : [];
+  return [...current.filter((item: JsonRecord) => !belongsToScope(item)), ...updates];
+}
+
+function mergeSiteManagerPayload(current: JsonRecord, incoming: JsonRecord, projectIds: Set<string>) {
+  const inProject = (item: JsonRecord, key = 'projectId') => projectIds.has(String(item?.[key] || ''));
+  const result: JsonRecord = {};
+  for (const key of ['inventoryLedger', 'materialLimits', 'timesheets', 'approvals', 'constructionTasks']) {
+    if (key in incoming) result[key] = mergeScopedRows(current[key], incoming[key], item => inProject(item));
+  }
+  if ('equipment' in incoming) result.equipment = mergeScopedRows(current.equipment, incoming.equipment, item => inProject(item, 'currentProjectId'));
+  return result;
+}
 
 async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
   const defaultPassword = process.env.SEED_EMPLOYEE_PIN || '5555';
@@ -31,20 +103,27 @@ async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
     const employeeId = String(employee.code || employee.id || '').trim().toUpperCase();
     if (!/^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(employeeId)) continue;
     const username = employeeId.toLowerCase();
+    const desiredRole: Role = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
     const existing = await pool.query('SELECT id,username FROM app_users WHERE employee_id=$1 LIMIT 1', [employeeId]);
     if (existing.rowCount) {
       if (existing.rows[0].username === 'nhanvien') {
         const usernameOwner = await pool.query('SELECT id FROM app_users WHERE username=$1 AND id<>$2 LIMIT 1', [username, existing.rows[0].id]);
         if (!usernameOwner.rowCount) await pool.query('UPDATE app_users SET username=$1 WHERE id=$2', [username, existing.rows[0].id]);
       }
+      await pool.query(
+        `UPDATE app_users SET full_name=$1, role=$2,
+         session_version=session_version+CASE WHEN role<>$2 THEN 1 ELSE 0 END
+         WHERE id=$3`,
+        [String(employee.name || employeeId), desiredRole, existing.rows[0].id],
+      );
       continue;
     }
     const usernameOwner = await pool.query('SELECT id FROM app_users WHERE username=$1 LIMIT 1', [username]);
     if (usernameOwner.rowCount) continue;
     await pool.query(
       `INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin)
-       VALUES($1,$2,'Employee',$3,$4,TRUE)`,
-      [username, String(employee.name || employeeId), passwordHash, employeeId],
+       VALUES($1,$2,$3,$4,$5,TRUE)`,
+      [username, String(employee.name || employeeId), desiredRole, passwordHash, employeeId],
     );
     created += 1;
   }
@@ -53,19 +132,30 @@ async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '8mb' }));
+app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
 const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: true, legacyHeaders: false });
 
 function sign(user: SessionUser) {
-  return jwt.sign(user, jwtSecret!, { expiresIn: '12h', issuer: 'construct-os' });
+  return jwt.sign(user, jwtSecret!, { expiresIn: '4h', issuer: 'quan-tri-doanh-nghiep', audience: 'webapp' });
 }
 
-function authenticate(req: express.Request, res: express.Response, next: express.NextFunction) {
+async function authenticate(req: express.Request, res: express.Response, next: express.NextFunction) {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'Chưa đăng nhập.' });
   try {
-    res.locals.user = jwt.verify(token, jwtSecret!, { issuer: 'construct-os' }) as SessionUser;
+    const tokenUser = jwt.verify(token, jwtSecret!, { issuer: 'quan-tri-doanh-nghiep', audience: 'webapp' }) as SessionUser;
+    const result = await pool.query('SELECT id,username,full_name,role,employee_id,active,must_change_pin,session_version FROM app_users WHERE id=$1', [tokenUser.id]);
+    const row = result.rows[0];
+    if (!row || !row.active || Number(row.session_version) !== Number(tokenUser.sessionVersion)) return res.status(401).json({ error: 'Phiên đăng nhập không còn hiệu lực.' });
+    const user: SessionUser = {
+      id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role,
+      employeeId: row.employee_id || undefined, mustChangePassword: row.must_change_pin,
+      sessionVersion: Number(row.session_version),
+    };
+    if (user.mustChangePassword && req.path !== '/api/auth/change-pin') return res.status(428).json({ error: 'Bạn phải đổi mật khẩu trước khi sử dụng hệ thống.', code: 'PASSWORD_CHANGE_REQUIRED' });
+    res.locals.user = user;
     next();
   } catch {
     res.status(401).json({ error: 'Phiên đăng nhập hết hạn.' });
@@ -88,11 +178,24 @@ app.get('/api/health', async (_req, res) => {
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const pin = String(req.body.pin || '');
-  if (!username || !/^\d{4,12}$/.test(pin)) return res.status(400).json({ error: 'Thông tin đăng nhập không hợp lệ.' });
-  const result = await pool.query('SELECT id, username, full_name, role, employee_id, pin_hash, must_change_pin FROM app_users WHERE username=$1 AND active=TRUE', [username]);
+  if (!/^[a-z0-9._-]{3,32}$/.test(username) || !/^\d{4,12}$/.test(pin)) return res.status(400).json({ error: 'Thông tin đăng nhập không hợp lệ.' });
+  const attempt = await pool.query('SELECT failed_count,window_started,locked_until FROM auth_attempts WHERE username=$1', [username]);
+  if (attempt.rows[0]?.locked_until && new Date(attempt.rows[0].locked_until).getTime() > Date.now()) return res.status(429).json({ error: 'Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.' });
+  const result = await pool.query('SELECT id, username, full_name, role, employee_id, pin_hash, must_change_pin, session_version FROM app_users WHERE username=$1 AND active=TRUE', [username]);
   const row = result.rows[0];
-  if (!row || !(await bcrypt.compare(pin, row.pin_hash))) return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' });
-  const user: SessionUser = { id: row.id, username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id || undefined, mustChangePassword: row.must_change_pin };
+  if (!row || !(await bcrypt.compare(pin, row.pin_hash))) {
+    await pool.query(
+      `INSERT INTO auth_attempts(username,failed_count,window_started,locked_until) VALUES($1,1,NOW(),NULL)
+       ON CONFLICT(username) DO UPDATE SET
+       failed_count=CASE WHEN auth_attempts.window_started < NOW()-INTERVAL '15 minutes' THEN 1 ELSE auth_attempts.failed_count+1 END,
+       window_started=CASE WHEN auth_attempts.window_started < NOW()-INTERVAL '15 minutes' THEN NOW() ELSE auth_attempts.window_started END,
+       locked_until=CASE WHEN (CASE WHEN auth_attempts.window_started < NOW()-INTERVAL '15 minutes' THEN 1 ELSE auth_attempts.failed_count+1 END)>=5 THEN NOW()+INTERVAL '15 minutes' ELSE NULL END`,
+      [username],
+    );
+    return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' });
+  }
+  await pool.query('DELETE FROM auth_attempts WHERE username=$1', [username]);
+  const user: SessionUser = { id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id || undefined, mustChangePassword: row.must_change_pin, sessionVersion: Number(row.session_version) };
   await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)', [user.id, 'login']);
   res.json({ token: sign(user), user });
 });
@@ -112,9 +215,10 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   const linked = await pool.query('SELECT 1 FROM app_users WHERE employee_id=$1', [employee.id]);
   if (linked.rowCount) return res.status(409).json({ error: 'Hồ sơ nhân viên này đã có tài khoản.' });
   try {
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,\'Employee\',$3,$4,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin', [username, employee.name, await bcrypt.hash(pin, 12), employee.id]);
+    const role: Role = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin,session_version', [username, employee.name, role, await bcrypt.hash(pin, 12), employee.id]);
     const row = result.rows[0];
-    const user: SessionUser = { id: row.id, username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id };
+    const user: SessionUser = { id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id, mustChangePassword: false, sessionVersion: Number(row.session_version) };
     res.status(201).json({ token: sign(user), user });
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không đăng ký được tài khoản.' });
@@ -128,7 +232,7 @@ app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => 
   if (!/^\d{6,12}$/.test(newPin) || currentPin === newPin) return res.status(400).json({ error: 'Mật khẩu mới phải có 6–12 chữ số và khác mật khẩu hiện tại.' });
   const result = await pool.query('SELECT pin_hash FROM app_users WHERE id=$1 AND active=TRUE', [user.id]);
   if (!result.rows[0] || !(await bcrypt.compare(currentPin, result.rows[0].pin_hash))) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng.' });
-  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=FALSE WHERE id=$2', [await bcrypt.hash(newPin, 12), user.id]);
+  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=FALSE, session_version=session_version+1 WHERE id=$2', [await bcrypt.hash(newPin, 12), user.id]);
   await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)', [user.id, 'pin_changed']);
   res.json({ success: true });
 });
@@ -175,9 +279,19 @@ app.get('/api/admin/users', authenticate, requireRoles('CEO'), async (_req, res)
 app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res) => {
   const { username, fullName, employeeId, role = 'Employee', pin } = req.body;
   if (!/^[a-z0-9._-]{3,32}$/.test(String(username || '')) || !/^\d{6,12}$/.test(String(pin || ''))) return res.status(400).json({ error: 'Tên đăng nhập hoặc mật khẩu không hợp lệ.' });
+  let effectiveRole: Role = role;
+  let effectiveFullName = String(fullName || '').trim();
+  if (employeeId) {
+    const payload = await loadErpPayload();
+    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: EmployeeAccountSource) => item.id === employeeId || item.code === employeeId);
+    if (!employee) return res.status(400).json({ error: 'Hồ sơ nhân viên không tồn tại.' });
+    effectiveRole = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
+    effectiveFullName = String(employee.name || effectiveFullName);
+  }
+  if (!['CEO', 'Accountant', 'SiteManager', 'Auditor', 'Employee'].includes(effectiveRole) || !effectiveFullName) return res.status(400).json({ error: 'Vai trò hoặc họ tên không hợp lệ.' });
   const hash = await bcrypt.hash(String(pin), 12);
   try {
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, fullName, role, hash, employeeId || null]);
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, effectiveFullName, effectiveRole, hash, employeeId || null]);
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không tạo được tài khoản.' });
@@ -185,14 +299,16 @@ app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res)
 });
 
 app.patch('/api/admin/users/:id/status', authenticate, requireRoles('CEO'), async (req, res) => {
-  const result = await pool.query('UPDATE app_users SET active=$1 WHERE id=$2 RETURNING id,active', [Boolean(req.body.active), req.params.id]);
+  const result = await pool.query('UPDATE app_users SET active=$1,session_version=session_version+1 WHERE id=$2 RETURNING id,active', [Boolean(req.body.active), req.params.id]);
+  await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'account_status_changed', { targetUserId: req.params.id, active: Boolean(req.body.active) }]);
   res.json(result.rows[0]);
 });
 
 app.post('/api/admin/users/:id/reset-pin', authenticate, requireRoles('CEO'), async (req, res) => {
   const pin = String(req.body.pin || '');
   if (!/^\d{6,12}$/.test(pin)) return res.status(400).json({ error: 'Mật khẩu phải có 6–12 chữ số.' });
-  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=TRUE WHERE id=$2', [await bcrypt.hash(pin, 12), req.params.id]);
+  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=TRUE, session_version=session_version+1 WHERE id=$2', [await bcrypt.hash(pin, 12), req.params.id]);
+  await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'password_reset', { targetUserId: req.params.id }]);
   res.json({ success: true });
 });
 
@@ -219,25 +335,47 @@ app.delete('/api/admin/users/:id', authenticate, requireRoles('CEO'), async (req
 
 app.get('/api/workforce/requests', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
-  const result = user.role === 'Employee'
-    ? await pool.query('SELECT * FROM workforce_requests WHERE employee_id=$1 ORDER BY created_at DESC', [user.employeeId])
-    : await pool.query('SELECT * FROM workforce_requests ORDER BY created_at DESC');
+  let result;
+  if (user.role === 'Employee') result = await pool.query('SELECT * FROM workforce_requests WHERE employee_id=$1 ORDER BY created_at DESC', [user.employeeId]);
+  else if (user.role === 'SiteManager') {
+    const payload = await loadErpPayload();
+    const projectIds = projectScopeForUser(user, payload);
+    const employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).map((item: JsonRecord) => String(item.id));
+    result = await pool.query('SELECT * FROM workforce_requests WHERE employee_id=ANY($1::text[]) ORDER BY created_at DESC', [employeeIds]);
+  } else result = await pool.query('SELECT * FROM workforce_requests ORDER BY created_at DESC');
   res.json(result.rows);
 });
 
 app.post('/api/workforce/requests', authenticate, requireRoles('Employee'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   const { requestType, startAt, endAt, reason } = req.body;
+  const validRequestTypes = ['leave', 'overtime', 'business_trip', 'shift_swap'];
+  const start = new Date(startAt); const end = new Date(endAt);
+  if (!validRequestTypes.includes(requestType) || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || String(reason || '').trim().length < 3 || String(reason).length > 1000) return res.status(400).json({ error: 'Nội dung yêu cầu không hợp lệ.' });
   const id = randomUUID();
   const result = await pool.query('INSERT INTO workforce_requests(id,employee_id,request_type,start_at,end_at,reason) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, user.employeeId, requestType, startAt, endAt, reason]);
-  await pool.query("INSERT INTO notifications(id,title,message,category) VALUES($1,$2,$3,'approval')", [randomUUID(), 'Yêu cầu mới cần duyệt', `${user.fullName} vừa gửi một yêu cầu ${requestType}.`]);
+  const payload = await loadErpPayload();
+  const requester = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => item.id === user.employeeId);
+  const managerIds = (Array.isArray(payload.employees) ? payload.employees : [])
+    .filter((item: EmployeeAccountSource) => isSiteManagerEmployee(item) && item.projectId === requester?.projectId)
+    .map((item: EmployeeAccountSource) => String(item.id));
+  const reviewers = await pool.query("SELECT id FROM app_users WHERE active=TRUE AND (role='CEO' OR (role='SiteManager' AND employee_id=ANY($1::text[])))", [managerIds]);
+  for (const reviewer of reviewers.rows) await pool.query("INSERT INTO notifications(id,user_id,title,message,category) VALUES($1,$2,$3,$4,'approval')", [randomUUID(), reviewer.id, 'Yêu cầu mới cần duyệt', `${user.fullName} vừa gửi một yêu cầu ${requestType}.`]);
   res.status(201).json(result.rows[0]);
 });
 
 app.patch('/api/workforce/requests/:id/review', authenticate, requireRoles('CEO','SiteManager'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   const status = req.body.status === 'approved' ? 'approved' : 'rejected';
-  const result = await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' RETURNING *', [status, user.id, req.body.note || '', req.params.id]);
+  let employeeIds: string[] | null = null;
+  if (user.role === 'SiteManager') {
+    const payload = await loadErpPayload();
+    const projectIds = projectScopeForUser(user, payload);
+    employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).map((item: JsonRecord) => String(item.id));
+  }
+  const result = employeeIds
+    ? await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' AND employee_id=ANY($5::text[]) RETURNING *', [status, user.id, req.body.note || '', req.params.id, employeeIds])
+    : await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' RETURNING *', [status, user.id, req.body.note || '', req.params.id]);
   const row = result.rows[0];
   if (row) await pool.query("INSERT INTO notifications(id,employee_id,title,message,category) VALUES($1,$2,$3,$4,'request')", [randomUUID(), row.employee_id, 'Yêu cầu đã được xử lý', `Yêu cầu của bạn đã ${status === 'approved' ? 'được duyệt' : 'bị từ chối'}.`]);
   res.json(row);
@@ -245,13 +383,25 @@ app.patch('/api/workforce/requests/:id/review', authenticate, requireRoles('CEO'
 
 app.get('/api/workforce/shifts', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
-  const result = user.role === 'Employee' ? await pool.query('SELECT * FROM work_shifts WHERE employee_id=$1 ORDER BY shift_date', [user.employeeId]) : await pool.query('SELECT * FROM work_shifts ORDER BY shift_date');
+  let result;
+  if (user.role === 'Employee') result = await pool.query('SELECT * FROM work_shifts WHERE employee_id=$1 ORDER BY shift_date', [user.employeeId]);
+  else if (user.role === 'SiteManager') {
+    const projectIds = [...projectScopeForUser(user, await loadErpPayload())];
+    result = await pool.query('SELECT * FROM work_shifts WHERE project_id=ANY($1::text[]) ORDER BY shift_date', [projectIds]);
+  } else result = await pool.query('SELECT * FROM work_shifts ORDER BY shift_date');
   res.json(result.rows);
 });
 
 app.post('/api/workforce/shifts', authenticate, requireRoles('CEO','SiteManager'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   const { employeeId, projectId, shiftDate, startTime, endTime, shiftName } = req.body;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(shiftDate || '')) || !/^\d{2}:\d{2}$/.test(String(startTime || '')) || !/^\d{2}:\d{2}$/.test(String(endTime || '')) || !String(shiftName || '').trim() || String(shiftName).length > 100) return res.status(400).json({ error: 'Thông tin ca làm việc không hợp lệ.' });
+  if (user.role === 'SiteManager') {
+    const payload = await loadErpPayload();
+    const projectIds = projectScopeForUser(user, payload);
+    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => item.id === employeeId);
+    if (!projectIds.has(String(projectId)) || !employee || !projectIds.has(String(employee.projectId))) return res.status(403).json({ error: 'Bạn chỉ được phân ca cho nhân viên thuộc công trường mình quản lý.' });
+  }
   const result = await pool.query('INSERT INTO work_shifts(id,employee_id,project_id,shift_date,start_time,end_time,shift_name,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(employee_id,shift_date) DO UPDATE SET project_id=EXCLUDED.project_id,start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,shift_name=EXCLUDED.shift_name RETURNING *', [randomUUID(), employeeId, projectId, shiftDate, startTime, endTime, shiftName, user.id]);
   res.json(result.rows[0]);
 });
@@ -259,16 +409,28 @@ app.post('/api/workforce/shifts', authenticate, requireRoles('CEO','SiteManager'
 app.get('/api/workforce/payroll-periods', authenticate, async (_req, res) => res.json((await pool.query('SELECT * FROM payroll_periods ORDER BY period DESC')).rows));
 app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CEO','Accountant'), async (req, res) => {
   const user = res.locals.user as SessionUser;
-  const result = await pool.query('INSERT INTO payroll_periods(period,attendance_locked,payroll_locked,locked_by,locked_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(period) DO UPDATE SET attendance_locked=EXCLUDED.attendance_locked,payroll_locked=EXCLUDED.payroll_locked,locked_by=EXCLUDED.locked_by,locked_at=NOW() RETURNING *', [req.params.period, Boolean(req.body.attendanceLocked), Boolean(req.body.payrollLocked), user.id]);
+  const period = String(req.params.period);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'Kỳ lương không hợp lệ.' });
+  const result = await pool.query('INSERT INTO payroll_periods(period,attendance_locked,payroll_locked,locked_by,locked_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(period) DO UPDATE SET attendance_locked=EXCLUDED.attendance_locked,payroll_locked=EXCLUDED.payroll_locked,locked_by=EXCLUDED.locked_by,locked_at=NOW() RETURNING *', [period, Boolean(req.body.attendanceLocked), Boolean(req.body.payrollLocked), user.id]);
   res.json(result.rows[0]);
 });
 
 app.get('/api/notifications', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
-  const result = await pool.query('SELECT * FROM notifications WHERE (user_id=$1 OR employee_id=$2 OR (user_id IS NULL AND employee_id IS NULL)) ORDER BY created_at DESC LIMIT 50', [user.id, user.employeeId || null]);
+  const allowGlobal = ['CEO', 'Accountant'].includes(user.role);
+  const result = await pool.query('SELECT * FROM notifications WHERE (user_id=$1 OR employee_id=$2 OR ($3::boolean AND user_id IS NULL AND employee_id IS NULL)) ORDER BY created_at DESC LIMIT 50', [user.id, user.employeeId || null, allowGlobal]);
   res.json(result.rows);
 });
-app.patch('/api/notifications/:id/read', authenticate, async (req, res) => { await pool.query('UPDATE notifications SET read_at=NOW() WHERE id=$1', [req.params.id]); res.json({ success: true }); });
+app.patch('/api/notifications/:id/read', authenticate, async (req, res) => {
+  const user = res.locals.user as SessionUser;
+  const allowGlobal = ['CEO', 'Accountant'].includes(user.role);
+  const result = await pool.query(
+    'UPDATE notifications SET read_at=NOW() WHERE id=$1 AND (user_id=$2 OR employee_id=$3 OR ($4::boolean AND user_id IS NULL AND employee_id IS NULL)) RETURNING id',
+    [req.params.id, user.id, user.employeeId || null, allowGlobal],
+  );
+  if (!result.rowCount) return res.status(404).json({ error: 'Thông báo không tồn tại.' });
+  res.json({ success: true });
+});
 app.post('/api/payslips/:period/viewed', authenticate, requireRoles('Employee'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   await pool.query('INSERT INTO payslip_views(period,employee_id) VALUES($1,$2) ON CONFLICT(period,employee_id) DO UPDATE SET viewed_at=NOW()', [req.params.period, user.employeeId]);
@@ -293,6 +455,8 @@ app.get('/api/state', authenticate, async (_req, res) => {
       timesheets: Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: { employeeId?: string }) => item.employeeId === user.employeeId) : [],
       laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: { employeeId?: string }) => item.employeeId === user.employeeId) : [],
     };
+  } else if (user.role === 'SiteManager') {
+    row.payload = filterPayloadForSiteManager(row.payload || {}, projectScopeForUser(user, row.payload || {}));
   }
   res.json(row);
 });
@@ -308,20 +472,54 @@ app.put('/api/state', authenticate, async (req, res) => {
   const revision = Number(req.body.revision);
   const payload = req.body.payload;
   if (!Number.isSafeInteger(revision) || !payload || typeof payload !== 'object') return res.status(400).json({ error: 'Dữ liệu đồng bộ không hợp lệ.' });
-  const siteManagerKeys = new Set([
-    'projects', 'inventoryItems', 'materialLimits', 'inventoryLedger', 'timesheets',
-    'equipment', 'approvals', 'constructionTasks',
-  ]);
-  let permittedPayload = user.role === 'SiteManager'
-    ? Object.fromEntries(Object.entries(payload).filter(([key]) => siteManagerKeys.has(key)))
-    : payload;
+  const currentState = await pool.query('SELECT payload FROM erp_state WHERE id=1');
+  const currentPayload = (currentState.rows[0]?.payload || {}) as JsonRecord;
+  let permittedPayload = payload;
+  let changedAttendancePeriods: string[] = [];
+  if (user.role === 'SiteManager') {
+    const projectIds = projectScopeForUser(user, currentPayload);
+    if (!projectIds.size) return res.status(403).json({ error: 'Tài khoản Chỉ huy trưởng chưa được gắn với công trường.' });
+    const incomingTimesheets = Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: JsonRecord) => projectIds.has(String(item.projectId))) : [];
+    const currentTimesheets = Array.isArray(currentPayload.timesheets) ? currentPayload.timesheets.filter((item: JsonRecord) => projectIds.has(String(item.projectId))) : [];
+    const before = new Map<string, JsonRecord>(currentTimesheets.map((item: JsonRecord) => [String(item.id), item]));
+    const after = new Map<string, JsonRecord>(incomingTimesheets.map((item: JsonRecord) => [String(item.id), item]));
+    const changedDates = new Set<string>();
+    for (const [id, item] of after) if (JSON.stringify(before.get(id)) !== JSON.stringify(item)) changedDates.add(String(item.date || ''));
+    for (const [id, item] of before) if (!after.has(id)) changedDates.add(String(item.date || ''));
+    changedAttendancePeriods = [...changedDates].filter(Boolean).map(date => date.slice(0, 7));
+    permittedPayload = mergeSiteManagerPayload(currentPayload, payload, projectIds);
+  }
   if (user.role === 'Employee') {
-    const current = await pool.query('SELECT payload FROM erp_state WHERE id=1');
-    const existingTimesheets = Array.isArray(current.rows[0]?.payload?.timesheets) ? current.rows[0].payload.timesheets : [];
+    const existingTimesheets = Array.isArray(currentPayload.timesheets) ? currentPayload.timesheets : [];
     const today = new Date().toISOString().slice(0, 10);
-    const ownTimesheets = Array.isArray(payload.timesheets)
+    const employees = Array.isArray(currentPayload.employees) ? currentPayload.employees : [];
+    const projects = Array.isArray(currentPayload.projects) ? currentPayload.projects : [];
+    const employee = employees.find((item: JsonRecord) => item.id === user.employeeId);
+    const project = projects.find((item: JsonRecord) => item.id === employee?.projectId);
+    if (!employee || !project) return res.status(403).json({ error: 'Hồ sơ nhân viên chưa được phân công công trường.' });
+    let ownTimesheets = Array.isArray(payload.timesheets)
       ? payload.timesheets.filter((item: { employeeId?: string; date?: string }) => item.employeeId === user.employeeId && item.date === today)
       : [];
+    const hasPhoto = ownTimesheets.some((item: JsonRecord) => Boolean(item.attendancePhoto));
+    if (hasPhoto) {
+      const consent = await pool.query('SELECT attendance_photo_consent FROM privacy_consents WHERE employee_id=$1', [user.employeeId]);
+      if (!consent.rows[0]?.attendance_photo_consent) return res.status(403).json({ error: 'Bạn chưa đồng ý sử dụng ảnh chấm công.' });
+    }
+    const invalidCoordinates = ownTimesheets.some((item: JsonRecord) => {
+      const latitude = Number(item.latitude); const longitude = Number(item.longitude);
+      return !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180;
+    });
+    if (invalidCoordinates) return res.status(400).json({ error: 'Tọa độ chấm công không hợp lệ.' });
+    ownTimesheets = ownTimesheets.map((item: JsonRecord) => {
+      const latitude = Number(item.latitude);
+      const longitude = Number(item.longitude);
+      const toRad = (value: number) => value * Math.PI / 180;
+      const dLat = toRad(latitude - Number(project.latitude || 0));
+      const dLon = toRad(longitude - Number(project.longitude || 0));
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(Number(project.latitude || 0))) * Math.cos(toRad(latitude)) * Math.sin(dLon / 2) ** 2;
+      const distance = 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return { ...item, employeeId: user.employeeId, projectId: project.id, gpsStatus: distance <= Number(project.geofenceRadius || 200) ? 'In-Range' : 'Out-Of-Range', verifiedByFace: Boolean(item.attendancePhoto) };
+    });
     permittedPayload = {
       timesheets: [
         ...existingTimesheets.filter((item: { employeeId?: string }) => item.employeeId !== user.employeeId),
@@ -330,10 +528,11 @@ app.put('/api/state', authenticate, async (req, res) => {
       ],
     };
   }
-  if (Array.isArray(permittedPayload.timesheets) && !['CEO', 'Accountant'].includes(user.role)) {
-    const period = new Date().toISOString().slice(0, 7);
-    const lock = await pool.query('SELECT attendance_locked FROM payroll_periods WHERE period=$1', [period]);
-    if (lock.rows[0]?.attendance_locked) return res.status(423).json({ error: `Bảng công tháng ${period} đã khóa.` });
+  if (user.role === 'Employee') changedAttendancePeriods = [new Date().toISOString().slice(0, 7)];
+  if (changedAttendancePeriods.length && !['CEO', 'Accountant'].includes(user.role)) {
+    const periods = [...new Set(changedAttendancePeriods)];
+    const lock = await pool.query('SELECT period FROM payroll_periods WHERE period=ANY($1::text[]) AND attendance_locked=TRUE', [periods]);
+    if (lock.rowCount) return res.status(423).json({ error: `Bảng công tháng ${lock.rows[0].period} đã khóa.` });
   }
   const result = await pool.query(
     `UPDATE erp_state SET payload=payload || $1::jsonb, revision=revision+1, updated_by=$2, updated_at=NOW()
@@ -357,7 +556,6 @@ await migrate();
 const seeds: Array<[string, string, Role, string, string?]> = [
   ['ceo', 'Giám đốc', 'CEO', process.env.SEED_CEO_PIN || '1111'],
   ['ketoan', 'Kế toán trưởng', 'Accountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
-  ['chihuy', 'Chỉ huy trưởng', 'SiteManager', process.env.SEED_SITE_MANAGER_PIN || '3333'],
   ['kiemtoan', 'Kiểm toán viên', 'Auditor', process.env.SEED_AUDITOR_PIN || '4444'],
 ];
 for (const [username, fullName, role, pin, employeeId] of seeds) {
@@ -374,6 +572,7 @@ for (const [username, fullName, role, pin, employeeId] of seeds) {
 const stateForAccounts = await pool.query('SELECT payload FROM erp_state WHERE id=1');
 const employeesForAccounts = Array.isArray(stateForAccounts.rows[0]?.payload?.employees) ? stateForAccounts.rows[0].payload.employees : [];
 await provisionEmployeeAccounts(employeesForAccounts);
+await pool.query("UPDATE app_users SET active=FALSE,session_version=session_version+1 WHERE username='chihuy' AND employee_id IS NULL AND active=TRUE");
 
 if (!process.env.VERCEL) {
   app.listen(port, '0.0.0.0', () => console.log(`Quản Trị Doanh Nghiệp listening on :${port}`));

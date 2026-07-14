@@ -84,7 +84,7 @@ export default function FlowSimulator() {
     {
       title: 'Bước 2: Hàng Rào Địa Lý & AI Quét Mặt',
       actor: 'Hệ thống (Geofencing & AI)',
-      desc: 'Hệ thống tính toán khoảng cách từ tọa độ của thiết bị đến tâm dự án. Nếu khoảng cách < 200m, gắn tag "In-Range", nếu > 200m gắn tag "Out-Of-Range" (Cảnh báo). AI đối khớp nhận diện khuôn mặt chống chấm công hộ.',
+      desc: 'Máy chủ tính khoảng cách từ tọa độ thiết bị đến tâm dự án và đối chiếu bán kính geofence. Ảnh chấm công được lưu khi nhân viên đã đồng ý sử dụng.',
       icon: <MapPin className="w-6 h-6 text-rose-600" />,
       tablesAffected: ['timesheets (gps_status, verified_by_face = True/False)']
     },

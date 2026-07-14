@@ -448,7 +448,7 @@ export default function HRManager({
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.checkInTime || '-'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.checkOutTime || '-'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px; font-weight: bold;">${statusVi}</td>
-          <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.verifiedByFace ? 'Đã xác minh FaceID' : 'Ghi nhận thủ công'}</td>
+          <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.verifiedByFace ? 'Có ảnh xác minh' : 'Không có ảnh'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.gpsStatus === 'In-Range' ? 'Trong phạm vi' : 'Ngoài phạm vi'}</td>
         </tr>
       `;
@@ -495,7 +495,7 @@ export default function HRManager({
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 80px;">Giờ Vào</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 80px;">Giờ Ra</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 120px;">Trạng Thái</th>
-              <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 160px;">Xác Minh FaceID</th>
+              <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 160px;">Ảnh xác minh</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 180px;">Định Vị GPS</th>
             </tr>
           </thead>
@@ -1450,7 +1450,7 @@ export default function HRManager({
           <p style="${headingStyle}">Điều 3: Quyền lợi và nghĩa vụ của Người lao động</p>
           <p style="${pBulletStyle}font-weight:bold;">3.1. Quyền lợi:</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(i) Phương tiện đi lại: Người lao động tự túc.</p>
-          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Mức lương chính thức: <strong>${salaryFormatted}</strong> (${previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua AI Face ID'}).</p>
+          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Mức lương chính thức: <strong>${salaryFormatted}</strong> (${previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua hệ thống chấm công'}).</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iii) Các khoản phụ cấp: <strong>${allowanceFormatted}</strong> (phụ cấp theo quy chế lương và hoạt động của Công ty).</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iv) Chế độ nâng lương: Đánh giá định kỳ theo hiệu quả KPI hoạt động cuối năm.</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(v) Chế độ Bảo hiểm: ${previewingContract.insurance ? 'Được đóng đầy đủ BHXH, BHYT, BHTN theo tỷ lệ quy định trích lập lương doanh nghiệp.' : 'Mức lương trên đã bao gồm phụ trội thay thế trực tiếp vào lương, người lao động tự túc đóng BHXH tự nguyện.'}</p>
@@ -2010,7 +2010,7 @@ export default function HRManager({
                     <th className="px-4 py-2.5">Địa điểm</th>
                     <th className="px-4 py-2.5 text-center">Trạng thái</th>
                     <th className="px-4 py-2.5 text-center">GPS Tracker</th>
-                    <th className="px-4 py-2.5 text-center">Nhận diện khuôn mặt (AI Face ID)</th>
+                    <th className="px-4 py-2.5 text-center">Ảnh xác minh chấm công</th>
                     <th className="px-4 py-2.5 text-center">Phê duyệt lúc về</th>
                   </tr>
                 </thead>
@@ -2590,7 +2590,7 @@ export default function HRManager({
                   className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
                 />
                 <label htmlFor="face-checked" className="text-xs font-bold text-slate-700">
-                  Xác minh khuôn mặt thông qua Camera AI hiện trường
+                  Có ảnh xác minh chấm công
                 </label>
               </div>
 
@@ -3922,7 +3922,7 @@ export default function HRManager({
                       (i) Phương tiện đi lại làm việc: Người lao động tự túc.
                     </p>
                     <p style={docPBulletStyle}>
-                      (ii) Mức lương chính thức: <strong>{formatVND(previewingContract.salaryAmount)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua AI Face ID'}).
+                      (ii) Mức lương chính thức: <strong>{formatVND(previewingContract.salaryAmount)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua hệ thống chấm công'}).
                     </p>
                     <p style={docPBulletStyle}>
                       (iii) Các khoản phụ cấp: <strong>{formatVND(previewingContract.allowance)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'phụ cấp tháng điện thoại, xăng xe' : 'phụ cấp tiền ăn ca /ngày'}).
@@ -4390,12 +4390,11 @@ export default function HRManager({
                                       <div class="info-item"><span class="info-label">DỰ ÁN:</span> <span class="info-val">${getProjectName(selectedEmpDetail.projectId)}</span></div>
                                     </div>
                                   </div>
-                                  <script>
-                                    window.onload = function() { window.print(); }
-                                  </script>
                                 </body>
                               </html>
                             `);
+                            printWindow.document.close();
+                            setTimeout(() => printWindow.print(), 250);
                           }
                         }}
                         className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
@@ -4421,7 +4420,7 @@ export default function HRManager({
                           Bảng Chấm Công - {selectedEmpDetail.name}
                         </div>
                         <p className="text-[10px] text-slate-500 mt-0.5">
-                          Hạch toán thực tế trong tháng {selectedMonth}/{selectedYear} qua AI Face ID & Toạ độ GPS
+                          Hạch toán thực tế trong tháng {selectedMonth}/{selectedYear} qua ảnh xác minh & tọa độ GPS
                         </p>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
@@ -4454,7 +4453,7 @@ export default function HRManager({
                                     <td>${sheet.checkInTime || '-'}</td>
                                     <td>${sheet.checkOutTime || '-'}</td>
                                     <td style="font-weight: bold;">${statusVi}</td>
-                                    <td>${sheet.verifiedByFace ? 'Xác minh FaceID' : 'Thủ công'}</td>
+                                    <td>${sheet.verifiedByFace ? 'Có ảnh xác minh' : 'Không có ảnh'}</td>
                                     <td>${sheet.gpsStatus === 'In-Range' ? 'Hợp lệ' : 'Ngoài phạm vi'}</td>
                                   </tr>
                                 `;
@@ -4510,7 +4509,7 @@ export default function HRManager({
                                           <th>Giờ Vào</th>
                                           <th>Giờ Ra</th>
                                           <th>Trạng Thái</th>
-                                          <th>Face ID</th>
+                                          <th>Ảnh xác minh</th>
                                           <th>Định Vị GPS</th>
                                         </tr>
                                       </thead>
@@ -4524,10 +4523,11 @@ export default function HRManager({
                                       <div class="summary-row"><span>Đi muộn:</span><strong>${data.daysLate} ngày</strong></div>
                                       <div class="summary-row"><span>Vắng mặt:</span><strong>${data.daysAbsent} ngày</strong></div>
                                     </div>
-                                    <script>window.onload = function() { window.print(); }</script>
                                   </body>
                                 </html>
                               `);
+                              printWindow.document.close();
+                              setTimeout(() => printWindow.print(), 250);
                             }
                           }}
                           className="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-[10px] font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
@@ -4573,7 +4573,7 @@ export default function HRManager({
                               <th className="px-4 py-2 text-center">Giờ Vào</th>
                               <th className="px-4 py-2 text-center">Giờ Ra</th>
                               <th className="px-4 py-2 text-center">Trạng Thái</th>
-                              <th className="px-4 py-2 text-center">Face ID</th>
+                              <th className="px-4 py-2 text-center">Ảnh xác minh</th>
                               <th className="px-4 py-2 text-center">Định Vị GPS</th>
                             </tr>
                           </thead>
@@ -4602,7 +4602,7 @@ export default function HRManager({
                                       sheet.verifiedByFace ? 'text-emerald-600' : 'text-slate-400'
                                     }`}>
                                       <span className={`w-1.5 h-1.5 rounded-full ${sheet.verifiedByFace ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                                      {sheet.verifiedByFace ? 'Đã xác thực' : 'Thủ công'}
+                                      {sheet.verifiedByFace ? 'Có ảnh' : 'Không có ảnh'}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
@@ -4776,7 +4776,7 @@ export default function HRManager({
                           <tr className="hover:bg-slate-50/50">
                             <td className="px-4 py-3">
                               <div className="font-semibold">{workDaysLabel}</div>
-                              <div className="text-[9px] text-slate-400 mt-0.5">Số ngày công thực tế ghi nhận ra vào cổng Face ID</div>
+                              <div className="text-[9px] text-slate-400 mt-0.5">Số ngày công thực tế ghi nhận trên hệ thống</div>
                             </td>
                             <td className="px-4 py-3 text-right font-mono font-bold text-slate-500">
                               {data.daysPresent} ngày

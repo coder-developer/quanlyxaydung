@@ -88,12 +88,21 @@ export default function App() {
   const handleLogout = useCallback(() => {
     apiLogout();
     localStorage.removeItem('erp_is_logged_in');
+    localStorage.removeItem('erp_current_user_role');
     localStorage.removeItem('erp_current_user_name');
     localStorage.removeItem('erp_current_employee_id');
+    if (serverMode) {
+      for (const key of [
+        'erp_company_config', 'erp_projects', 'erp_employees', 'erp_contractors', 'erp_contracts',
+        'erp_inventory_items', 'erp_material_limits', 'erp_inventory_ledger', 'erp_timesheets',
+        'erp_equipment', 'erp_approvals', 'erp_transactions', 'erp_labor_contracts',
+        'erp_construction_tasks', 'erp_registered_users',
+      ]) localStorage.removeItem(key);
+    }
     setCurrentUserFullName(null);
     setCurrentEmployeeId(null);
     setIsLoggedIn(false);
-  }, []);
+  }, [serverMode]);
 
   useEffect(() => {
     window.addEventListener('erp:session-expired', handleLogout);
@@ -124,7 +133,7 @@ export default function App() {
 
   const handleTabClick = useCallback((tab: typeof activeTab, label: string) => {
     if (isTabRestricted(tab)) {
-      setPermissionDeniedMsg(`Bạn không có quyền truy cập vào phân hệ "${label}" với vai trò hiện tại (${currentUserRole === 'SiteManager' ? 'Chỉ Huy Trưởng' : currentUserRole}). Vui lòng chuyển đổi sang vai trò Giám Đốc hoặc Kế Toán Trưởng ở góc phải màn hình để tiếp tục.`);
+      setPermissionDeniedMsg(`Bạn không có quyền truy cập phân hệ "${label}" với tài khoản hiện tại.`);
     } else {
       setActiveTab(tab);
     }
@@ -1267,7 +1276,7 @@ export default function App() {
               <span className="text-[11px] text-white font-extrabold leading-none uppercase truncate">
                 {currentUserRole === 'CEO' && (companyConfig?.directorName || 'Đỗ Minh Tuấn')}
                 {currentUserRole === 'Accountant' && (companyConfig?.chiefAccountantName || 'Nguyễn T. Hà')}
-                {currentUserRole === 'SiteManager' && (companyConfig?.technicianName || 'Trần Hải Nam')}
+                {currentUserRole === 'SiteManager' && (currentUserFullName || 'Chỉ huy trưởng')}
                 {currentUserRole === 'Auditor' && 'Thanh Tra Khách'}
               </span>
               <span className="text-[8px] text-blue-400 uppercase tracking-wider font-bold mt-1">

@@ -22,6 +22,7 @@ export async function migrate() {
       employee_id TEXT,
       pin_hash TEXT NOT NULL,
       must_change_pin BOOLEAN NOT NULL DEFAULT FALSE,
+      session_version INTEGER NOT NULL DEFAULT 1,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -92,9 +93,16 @@ export async function migrate() {
       consented_at TIMESTAMPTZ,
       revoked_at TIMESTAMPTZ
     );
+    CREATE TABLE IF NOT EXISTS auth_attempts (
+      username TEXT PRIMARY KEY,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      window_started TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      locked_until TIMESTAMPTZ
+    );
     INSERT INTO erp_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS employee_id TEXT;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS must_change_pin BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
     ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('CEO','Accountant','SiteManager','Auditor','Employee'));
   `);
