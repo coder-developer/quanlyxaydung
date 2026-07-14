@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  KeyRound, 
-  HardHat, 
-  AlertCircle, 
-  Eye, 
-  EyeOff, 
-  Users, 
-  ArrowRight, 
-  UserPlus, 
-  LogIn, 
+import {
+  ShieldCheck,
+  KeyRound,
+  HardHat,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Users,
+  ArrowRight,
+  UserPlus,
+  LogIn,
   ArrowLeft,
   CheckCircle2,
   UserCheck
@@ -31,21 +31,22 @@ interface RegisteredUser {
   createdAt: string;
 }
 
-export default function LoginScreen({ 
-  onLoginSuccess, 
-  appTitle = 'CONSTRUCT-OS', 
-  companyName = 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT' 
+export default function LoginScreen({
+  onLoginSuccess,
+  appTitle = 'Quản Trị Doanh Nghiệp',
+  companyName = 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'
 }: LoginScreenProps) {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
-  
+
   // App modes: 'login' or 'register'
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
-  
+
   // Login types: 'default' (by default roles) or 'personal' (by registered users)
   const [loginType, setLoginType] = useState<'default' | 'personal'>('default');
 
   // Login states
   const [selectedRole, setSelectedRole] = useState<UserRole>('CEO');
+  const [employeeUsername, setEmployeeUsername] = useState('');
   const [selectedUsername, setSelectedUsername] = useState<string>('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
@@ -101,7 +102,7 @@ export default function LoginScreen({
     },
     SiteManager: {
       name: 'Chỉ Huy Trưởng',
-      desc: 'Quản lý kho bãi, cấp phát xăng dầu dã chiến & điều phối cơ giới',
+      desc: 'Quản lý kho bãi, cấp phát nhiên liệu và điều phối thiết bị',
       correctPin: '3333',
       icon: HardHat,
       color: 'border-l-emerald-500 text-emerald-600',
@@ -109,7 +110,7 @@ export default function LoginScreen({
     },
     Auditor: {
       name: 'Thanh Tra / Khách',
-      desc: 'Truy cập dã chiến chế độ chỉ xem báo cáo P&L dã ngoại',
+      desc: 'Truy cập chế độ chỉ xem báo cáo và dữ liệu kiểm toán',
       correctPin: '4444',
       icon: KeyRound,
       color: 'border-l-amber-500 text-amber-600',
@@ -132,9 +133,14 @@ export default function LoginScreen({
     if (loginType === 'default') {
       const config = roleConfig[selectedRole];
       if (serverMode) {
-        const usernames: Record<UserRole, string> = { CEO: 'ceo', Accountant: 'ketoan', SiteManager: 'chihuy', Auditor: 'kiemtoan', Employee: 'nhanvien' };
+        const usernames: Record<Exclude<UserRole, 'Employee'>, string> = { CEO: 'ceo', Accountant: 'ketoan', SiteManager: 'chihuy', Auditor: 'kiemtoan' };
+        const username = selectedRole === 'Employee' ? employeeUsername.trim().toLowerCase() : usernames[selectedRole];
+        if (!username) {
+          setErrorMsg('Vui lòng nhập tên đăng nhập nhân viên.');
+          return;
+        }
         try {
-          const { user } = await apiLogin(usernames[selectedRole], pin);
+          const { user } = await apiLogin(username, pin);
           onLoginSuccess(user.role, user.fullName, user.employeeId);
         } catch (error) {
           setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
@@ -144,7 +150,7 @@ export default function LoginScreen({
       if (pin === config.correctPin) {
         onLoginSuccess(selectedRole);
       } else {
-        setErrorMsg(`Mã khóa PIN không đúng cho vai trò ${config.name}. Vui lòng thử lại!`);
+        setErrorMsg(`Mật khẩu không đúng cho vai trò ${config.name}.`);
       }
     } else {
       // Personal login
@@ -163,7 +169,7 @@ export default function LoginScreen({
         // Successful personal login
         onLoginSuccess(user.role, user.name);
       } else {
-        setErrorMsg(`Mã PIN xác thực không chính xác cho tài khoản "${user.name}". Vui lòng thử lại!`);
+        setErrorMsg(`Mật khẩu không chính xác cho tài khoản "${user.name}".`);
       }
     }
   };
@@ -192,8 +198,8 @@ export default function LoginScreen({
     }
 
     if (serverMode) {
-      if (!/^\d{6,12}$/.test(regPin)) { setErrorMsg('PIN đăng ký phải có 6–12 chữ số.'); return; }
-      if (regPin !== regConfirmPin) { setErrorMsg('Xác nhận mã PIN không trùng khớp.'); return; }
+      if (!/^\d{6,12}$/.test(regPin)) { setErrorMsg('Mật khẩu đăng ký phải có 6–12 chữ số.'); return; }
+      if (regPin !== regConfirmPin) { setErrorMsg('Xác nhận mật khẩu không trùng khớp.'); return; }
       try {
         const { user } = await apiRegister(cleanUsername, regEmployeeCode.trim(), regPhone, regPin);
         onLoginSuccess(user.role, user.fullName, user.employeeId);
@@ -210,12 +216,12 @@ export default function LoginScreen({
     }
 
     if (regPin.length !== 4 || !/^\d+$/.test(regPin)) {
-      setErrorMsg('Mã PIN bảo mật phải gồm đúng 4 chữ số.');
+      setErrorMsg('Mật khẩu phải gồm đúng 4 chữ số.');
       return;
     }
 
     if (regPin !== regConfirmPin) {
-      setErrorMsg('Xác nhận mã PIN không trùng khớp.');
+      setErrorMsg('Xác nhận mật khẩu không trùng khớp.');
       return;
     }
 
@@ -238,7 +244,7 @@ export default function LoginScreen({
     const updatedList = [...registeredUsers, newUser];
     localStorage.setItem('erp_registered_users', JSON.stringify(updatedList));
     setRegisteredUsers(updatedList);
-    
+
     // Clear registration fields
     setRegUsername('');
     setRegFullName('');
@@ -286,19 +292,13 @@ export default function LoginScreen({
           </div>
         )}
 
-        {/* Info or error banner */}
+        {/* Login result banner */}
         {errorMsg ? (
           <div className="mb-5 bg-rose-950/50 border border-rose-800/80 rounded-xl p-3.5 flex gap-2.5 text-rose-200 text-xs">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <span className="font-semibold">{errorMsg}</span>
           </div>
-        ) : !successMsg && (
-          <div className="mb-5 bg-blue-950/30 border border-blue-900/50 rounded-xl p-3.5 text-slate-300 text-center text-[11px] leading-relaxed">
-            {activeMode === 'login' 
-              ? 'Chào mừng bạn đến với Cổng quản trị dự án dã chiến cao tốc. Vui lòng xác thực tài khoản hoặc vai trò làm việc.'
-              : 'Đăng ký tài khoản cá nhân mới để tác nghiệp. Tài khoản được bảo mật và lưu trữ nội bộ trên trình duyệt.'}
-          </div>
-        )}
+        ) : null}
 
         {/* MAIN MODE: LOGIN */}
         {activeMode === 'login' && (
@@ -318,7 +318,7 @@ export default function LoginScreen({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Vai trò mặc định
+                Đăng nhập hệ thống
               </button>
               {!serverMode && <button
                 type="button"
@@ -359,6 +359,7 @@ export default function LoginScreen({
                           type="button"
                           onClick={() => {
                             setSelectedRole(role);
+                            if (role !== 'Employee') setEmployeeUsername('');
                             setErrorMsg(null);
                           }}
                           className={`text-left p-3 rounded-xl border transition-all duration-200 flex flex-col justify-between h-24 relative overflow-hidden cursor-pointer ${
@@ -397,6 +398,26 @@ export default function LoginScreen({
                 </div>
               )}
 
+              {serverMode && loginType === 'default' && selectedRole === 'Employee' && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                    Tên đăng nhập nhân viên
+                  </label>
+                  <input
+                    type="text"
+                    autoComplete="username"
+                    value={employeeUsername}
+                    onChange={(event) => {
+                      setEmployeeUsername(event.target.value);
+                      setErrorMsg(null);
+                    }}
+                    placeholder="Ví dụ: nv-001"
+                    className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white lowercase focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500"
+                    required
+                  />
+                </div>
+              )}
+
               {/* Type 2: Personal Accounts Selection */}
               {loginType === 'personal' && (
                 <div className="space-y-4">
@@ -427,10 +448,10 @@ export default function LoginScreen({
                         className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 cursor-pointer"
                       >
                         {registeredUsers.map((u) => {
-                          const rLabel = 
-                            u.role === 'CEO' ? 'Giám Đốc (CEO)' : 
-                            u.role === 'Accountant' ? 'Kế Toán Trưởng' : 
-                            u.role === 'SiteManager' ? 'Chỉ Huy Trưởng' : 
+                          const rLabel =
+                            u.role === 'CEO' ? 'Giám Đốc (CEO)' :
+                            u.role === 'Accountant' ? 'Kế Toán Trưởng' :
+                            u.role === 'SiteManager' ? 'Chỉ Huy Trưởng' :
                             'Thanh Tra / Khách';
                           return (
                             <option key={u.username} value={u.username} className="bg-slate-900 text-white font-semibold">
@@ -449,11 +470,8 @@ export default function LoginScreen({
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                      Nhập mã khóa PIN xác thực
+                      Mật khẩu đăng nhập
                     </label>
-                    <span className="text-[9px] font-mono text-slate-500">
-                      {serverMode ? 'PIN bảo mật 6–12 chữ số' : 'Yêu cầu 4 chữ số'}
-                    </span>
                   </div>
 
                   <div className="relative">
@@ -465,7 +483,7 @@ export default function LoginScreen({
                         setPin(e.target.value.replace(/\D/g, ''));
                         setErrorMsg(null);
                       }}
-                      placeholder="••••"
+                      placeholder="Nhập mật khẩu"
                       className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-center text-sm font-bold font-mono tracking-[1.5em] pl-[2em] text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 placeholder:tracking-normal placeholder:pl-0 placeholder:text-slate-600 transition-all shadow-inner"
                       required
                     />
@@ -487,7 +505,7 @@ export default function LoginScreen({
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/10 transition-all cursor-pointer group mt-2"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Xác thực & Vào hệ thống</span>
+                  <span>Đăng nhập</span>
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
               )}
@@ -588,7 +606,7 @@ export default function LoginScreen({
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                    Mã PIN bảo mật *
+                    Mật khẩu đăng nhập *
                   </label>
                 </div>
                 <div className="relative">
@@ -614,7 +632,7 @@ export default function LoginScreen({
 
               <div className="space-y-1">
                 <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                  Xác nhận mã PIN *
+                  Xác nhận mật khẩu *
                 </label>
                 <input
                   type={showRegPin ? 'text' : 'password'}
@@ -625,7 +643,7 @@ export default function LoginScreen({
                   className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs font-bold font-mono tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80"
                   required
                 />
-                <span className="text-[8px] text-slate-500 block">Nhập lại mã PIN trên</span>
+                <span className="text-[8px] text-slate-500 block">Nhập lại mật khẩu trên</span>
               </div>
             </div>
 

@@ -21,6 +21,7 @@ export async function migrate() {
       role TEXT NOT NULL,
       employee_id TEXT,
       pin_hash TEXT NOT NULL,
+      must_change_pin BOOLEAN NOT NULL DEFAULT FALSE,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -93,6 +94,7 @@ export async function migrate() {
     );
     INSERT INTO erp_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS employee_id TEXT;
+    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS must_change_pin BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
     ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('CEO','Accountant','SiteManager','Auditor','Employee'));
   `);

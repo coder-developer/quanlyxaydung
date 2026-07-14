@@ -91,14 +91,14 @@ export default function FlowSimulator() {
     {
       title: 'Bước 3: Ghi Nhận Bảng Công Ngày',
       actor: 'Ban Chỉ huy Công trường',
-      desc: 'Dữ liệu chấm công đẩy thẳng về Web Admin của Kế toán công trường. Hệ thống tự động phân loại công ngày: Đúng giờ, Đi muộn, Tăng ca dã chiến.',
+      desc: 'Dữ liệu chấm công đẩy thẳng về Web Admin của Kế toán công trường. Hệ thống tự động phân loại công ngày: Đúng giờ, Đi muộn, Tăng ca .',
       icon: <CalendarDays className="w-6 h-6 text-blue-600" />,
       tablesAffected: ['timesheets (status = "Present"/"Late"/"Overtime")']
     },
     {
       title: 'Bước 4: Xét Duyệt Tạm Ứng Tuần/Tháng',
       actor: 'Kỹ sư trưởng & Giám đốc',
-      desc: 'Trong tháng, công nhân có thể đề xuất tạm ứng lương lương tuần dã chiến. Đề xuất này đi qua quy trình ký duyệt 3 cấp và ghi giảm nợ tạm ứng.',
+      desc: 'Trong tháng, công nhân có thể đề xuất tạm ứng lương lương tuần . Đề xuất này đi qua quy trình ký duyệt 3 cấp và ghi giảm nợ tạm ứng.',
       icon: <ShieldCheck className="w-6 h-6 text-emerald-600" />,
       tablesAffected: ['approval_workflows (request_type = "Salary_Advance")', 'financial_transactions (Expense, reference_id)']
     },
@@ -211,7 +211,7 @@ export default function FlowSimulator() {
         {/* Right Side: Step Visualizer Detail & Database Simulation Card */}
         <div className="lg:col-span-7 space-y-6">
           <div className="bg-gray-50 rounded-xl p-6 border border-gray-100 flex flex-col justify-between h-full space-y-4">
-            
+
             {/* Step Heading */}
             <div className="flex items-start gap-4">
               <div className="p-3.5 bg-white rounded-xl shadow-2xs border border-gray-100 shrink-0">
@@ -230,13 +230,13 @@ export default function FlowSimulator() {
                 <Table className="w-3.5 h-3.5 text-gray-400" />
                 Dữ Liệu Tác Động Trong Database (SQL Tables Affected):
               </h5>
-              
+
               <div className="space-y-2">
                 {currentStepData.tablesAffected.map((tbl, idx) => {
                   const parts = tbl.split(' (');
                   const tName = parts[0];
                   const tField = parts[1] ? parts[1].replace(')', '') : null;
-                  
+
                   return (
                     <div key={idx} className="bg-white p-2.5 rounded-lg border border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-1.5 shadow-3xs">
                       <div className="flex items-center gap-2">

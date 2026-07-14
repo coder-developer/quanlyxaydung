@@ -1,31 +1,31 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged,
   User,
   signOut
 } from 'firebase/auth';
-import { 
-  Cloud, 
-  Folder, 
-  FileText, 
-  FileSpreadsheet, 
-  FileImage, 
-  File, 
-  Upload, 
-  Plus, 
-  Trash2, 
-  ExternalLink, 
-  ChevronRight, 
-  Search, 
-  ArrowLeft, 
-  RefreshCw, 
-  LogOut, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Cloud,
+  Folder,
+  FileText,
+  FileSpreadsheet,
+  FileImage,
+  File,
+  Upload,
+  Plus,
+  Trash2,
+  ExternalLink,
+  ChevronRight,
+  Search,
+  ArrowLeft,
+  RefreshCw,
+  LogOut,
+  AlertCircle,
+  CheckCircle2,
   Loader2,
   HardDrive,
   FolderPlus,
@@ -79,7 +79,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
-  
+
   // Custom dialogs & feedback
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string; isFolder: boolean } | null>(null);
@@ -121,7 +121,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   const handleSignIn = async () => {
     setLoadingAuth(true);
     const provider = new GoogleAuthProvider();
-    
+
     // Chỉ quản lý các tệp do ứng dụng tạo hoặc người dùng chọn, không xin toàn quyền Drive.
     provider.addScope('https://www.googleapis.com/auth/drive.file');
 
@@ -139,9 +139,9 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
       setToast({ type: 'success', message: 'Kết nối Google Drive thành công!' });
     } catch (error: any) {
       console.error('Lỗi đăng nhập Google Auth:', error);
-      setToast({ 
-        type: 'error', 
-        message: error.message || 'Đăng nhập thất bại. Vui lòng xác nhận quyền truy cập Google Drive.' 
+      setToast({
+        type: 'error',
+        message: error.message || 'Đăng nhập thất bại. Vui lòng xác nhận quyền truy cập Google Drive.'
       });
     } finally {
       setLoadingAuth(false);
@@ -175,7 +175,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
       }
 
       const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)&orderBy=folder,name&pageSize=50`;
-      
+
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -233,7 +233,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFolderName.trim() || !accessToken) return;
-    
+
     setCreatingFolder(true);
     try {
       const metadata = {
@@ -315,7 +315,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   const handleBackupErp = async () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const payload = JSON.stringify({ version: '2.0', exportedAt: new Date().toISOString(), data: backupData }, null, 2);
-    await uploadFile(new File([payload], `CONSTRUCT-OS-Backup-${timestamp}.json`, { type: 'application/json' }));
+    await uploadFile(new File([payload], `Quan-Tri-Doanh-Nghiep-Backup-${timestamp}.json`, { type: 'application/json' }));
   };
 
   // File Drag & Drop Handlers
@@ -331,7 +331,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       uploadFile(file);
@@ -361,9 +361,9 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
         throw new Error('Xóa tệp/thư mục thất bại.');
       }
 
-      setToast({ 
-        type: 'success', 
-        message: `Đã xóa ${confirmDelete.isFolder ? 'thư mục' : 'tệp'} "${confirmDelete.name}" khỏi Google Drive.` 
+      setToast({
+        type: 'success',
+        message: `Đã xóa ${confirmDelete.isFolder ? 'thư mục' : 'tệp'} "${confirmDelete.name}" khỏi Google Drive.`
       });
       setConfirmDelete(null);
       fetchFiles(currentFolderId);
@@ -437,7 +437,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
         }
       }
 
-      setToast({ type: 'success', message: 'Khởi tạo cấu trúc lưu trữ dã chiến ERP thành công!' });
+      setToast({ type: 'success', message: 'Khởi tạo cấu trúc lưu trữ ERP thành công!' });
       setCurrentFolderId(rootFolder.id);
       setBreadcrumbs([{ id: 'root', name: 'My Drive' }, { id: rootFolder.id, name: 'CONSTRUCT_OS_RECORDS' }]);
     } catch (error: any) {
@@ -471,12 +471,12 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
     if (selectedProjectId === 'all') return files;
     const selectedProj = projects.find(p => p.id === selectedProjectId);
     if (!selectedProj) return files;
-    
+
     // Virtual tagging: Match files containing project name or ID
     const query = selectedProj.name.toLowerCase();
     const queryId = selectedProj.id.toLowerCase();
-    return files.filter(f => 
-      f.name.toLowerCase().includes(query) || 
+    return files.filter(f =>
+      f.name.toLowerCase().includes(query) ||
       f.name.toLowerCase().includes(queryId) ||
       f.mimeType === 'application/vnd.google-apps.folder' // always keep folders
     );
@@ -500,7 +500,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
           {/* Subtle tech background shapes */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -z-10"></div>
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -z-10"></div>
-          
+
           <div className="w-16 h-16 bg-blue-50 rounded-2xl text-blue-600 flex items-center justify-center mx-auto mb-4 shadow-3xs border border-blue-100">
             <Cloud className="w-8 h-8 animate-pulse" />
           </div>
@@ -517,11 +517,11 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
             <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
               <div className="flex items-center gap-2 text-slate-700 font-bold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Quản lý thư mục dã chiến
+                Quản lý thư mục
               </div>
               <p className="text-slate-500 leading-normal">Tự động cấu trúc cây thư mục hồ sơ theo mã dự án Coteccons/Delta.</p>
             </div>
-            
+
             <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
               <div className="flex items-center gap-2 text-slate-700 font-bold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -543,7 +543,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 Độc lập thiết bị
               </div>
-              <p className="text-slate-500 leading-normal">Truy cập dữ liệu trực tiếp tại văn phòng chính hoặc di động dã chiến tại hiện trường.</p>
+                <p className="text-slate-500 leading-normal">Truy cập dữ liệu trực tiếp tại văn phòng chính hoặc trên thiết bị di động tại hiện trường.</p>
             </div>
           </div>
 
@@ -575,7 +575,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   // MAIN EXPLORER UI
   return (
     <div className="space-y-6" id="drive-manager-root">
-      
+
       {/* Toast Feedback */}
       {toast && (
         <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl border shadow-xl text-xs font-semibold animate-slide-up ${
@@ -600,7 +600,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                 <p className="text-[10px] text-rose-500 uppercase font-bold">Hành động này không thể hoàn tác</p>
               </div>
             </div>
-            
+
             <p className="text-slate-600 leading-relaxed">
               Bạn đang yêu cầu xóa {confirmDelete.isFolder ? 'thư mục' : 'tệp'} <strong className="text-slate-800">"{confirmDelete.name}"</strong> khỏi hệ thống đám mây. Mọi liên kết hồ sơ dự án liên quan sẽ bị gián đoạn.
             </p>
@@ -631,7 +631,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-black text-slate-800 uppercase tracking-tight">Hệ thống Drive lưu trữ dã chiến</h2>
+              <h2 className="text-base font-black text-slate-800 uppercase tracking-tight">Hệ thống Drive lưu trữ </h2>
               <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[8px] font-extrabold uppercase tracking-widest px-1.5 py-0.5 rounded">Đã liên kết</span>
             </div>
             <p className="text-slate-400 text-[10px] font-semibold flex items-center gap-1.5 mt-0.5">
@@ -674,18 +674,18 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
             <Upload className="w-4 h-4" />
             <span>Tải tệp lên</span>
           </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            className="hidden" 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
           />
         </div>
       </div>
 
       {/* Explorer Content block */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
+
         {/* Left Column: Filter and folder structures */}
         <div className="lg:col-span-1 space-y-6">
           {/* Quick Create Folder Card */}
@@ -694,7 +694,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
               <Plus className="w-4 h-4 text-blue-500" /> TẠO THƯ MỤC MỚI
             </h3>
             <form onSubmit={handleCreateFolder} className="space-y-3">
-              <input 
+              <input
                 type="text"
                 placeholder="Tên thư mục (vd: Bản vẽ dầm móng...)"
                 value={newFolderName}
@@ -726,7 +726,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                 <Info className="w-4 h-4 text-blue-500" /> LIÊN KẾT HỒ SƠ DỰ ÁN
               </h3>
               <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-1">
-                Lọc nhanh các tệp tài liệu được lưu trữ, đồng bộ hoặc ghi chú khớp với từ khóa của từng công trình dã chiến.
+                Lọc nhanh các tệp tài liệu được lưu trữ, đồng bộ hoặc ghi chú khớp với từ khóa của từng công trình .
               </p>
             </div>
 
@@ -734,8 +734,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
               <button
                 onClick={() => setSelectedProjectId('all')}
                 className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between border transition-all ${
-                  selectedProjectId === 'all' 
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-3xs' 
+                  selectedProjectId === 'all'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-3xs'
                     : 'bg-white text-slate-600 border-slate-100 hover:bg-slate-50'
                 }`}
               >
@@ -747,8 +747,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
 
               {projects.map(proj => {
                 // Approximate count
-                const count = files.filter(f => 
-                  f.name.toLowerCase().includes(proj.name.toLowerCase()) || 
+                const count = files.filter(f =>
+                  f.name.toLowerCase().includes(proj.name.toLowerCase()) ||
                   f.name.toLowerCase().includes(proj.id.toLowerCase())
                 ).length;
 
@@ -757,8 +757,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                     key={proj.id}
                     onClick={() => setSelectedProjectId(proj.id)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between border transition-all ${
-                      selectedProjectId === proj.id 
-                        ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-3xs' 
+                      selectedProjectId === proj.id
+                        ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-3xs'
                         : 'bg-white text-slate-600 border-slate-100 hover:bg-slate-50'
                     }`}
                   >
@@ -775,17 +775,17 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
 
         {/* Right Column: Active File Explorer and Grid */}
         <div className="lg:col-span-3 space-y-4">
-          
+
           {/* Breadcrumbs & Search Area */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-            
+
             {/* Breadcrumb Path navigation */}
             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400 font-bold">
               <HardDrive className="w-4 h-4 text-slate-400 shrink-0" />
               {breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.id}>
                   {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-300" />}
-                  <button 
+                  <button
                     onClick={() => handleBreadcrumbClick(crumb, idx)}
                     className={`hover:text-blue-600 transition-colors uppercase tracking-tight text-[11px] ${
                       idx === breadcrumbs.length - 1 ? 'text-slate-800' : ''
@@ -802,7 +802,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-slate-400" />
               </div>
-              <input 
+              <input
                 type="text"
                 placeholder="Tìm nhanh tệp tin trong thư mục hiện tại..."
                 value={searchQuery}
@@ -819,7 +819,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
           </div>
 
           {/* DRAG AND DROP CONTAINER */}
-          <div 
+          <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -827,7 +827,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
               isDragOver ? 'border-2 border-dashed border-blue-500 bg-blue-50/20' : ''
             }`}
           >
-            
+
             {/* Uploading progress overlay */}
             {uploading && (
               <div className="absolute inset-0 bg-white/80 backdrop-blur-3xs flex flex-col items-center justify-center p-6 z-10 text-center animate-fade-in">
@@ -841,7 +841,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
             {isDragOver && (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-blue-50/40 pointer-events-none z-10">
                 <Upload className="w-10 h-10 text-blue-600 animate-bounce mb-3" />
-                <p className="text-sm font-black text-blue-800 uppercase tracking-tight">Thả tệp dã chiến vào đây</p>
+                      <p className="text-sm font-black text-blue-800 uppercase tracking-tight">Thả tệp vào đây</p>
                 <p className="text-xs text-blue-600 mt-1">Hệ thống sẽ tải tệp trực tiếp vào thư mục hiện tại</p>
               </div>
             )}
@@ -867,11 +867,11 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                   <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                     {matchedProjectFiles.map(file => {
                       const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
-                      const formattedSize = file.size 
-                        ? `${(parseInt(file.size) / 1024).toFixed(1)} KB` 
+                      const formattedSize = file.size
+                        ? `${(parseInt(file.size) / 1024).toFixed(1)} KB`
                         : isFolder ? 'Thư mục' : '—';
-                      
-                      const formattedDate = file.modifiedTime 
+
+                      const formattedDate = file.modifiedTime
                         ? new Date(file.modifiedTime).toLocaleDateString('vi-VN', {
                             year: 'numeric',
                             month: '2-digit',
@@ -880,8 +880,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                         : '—';
 
                       return (
-                        <tr 
-                          key={file.id} 
+                        <tr
+                          key={file.id}
                           className="hover:bg-slate-50/50 transition-colors"
                         >
                           {/* Name column */}
@@ -931,7 +931,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                                 <ArrowUpRight className="w-3 h-3" />
                               </a>
                             )}
-                            
+
                             <button
                               onClick={() => setConfirmDelete({ id: file.id, name: file.name, isFolder })}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all inline-flex items-center"

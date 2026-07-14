@@ -40,8 +40,8 @@ export default function DashboardView({
     const query = globalSearchQuery.toLowerCase().trim();
     return contracts.filter(contract => {
       const proj = projects.find(p => p.id === contract.projectId);
-      const partnerName = contract.partnerType === 'Client' 
-        ? 'Chủ Đầu Tư' 
+      const partnerName = contract.partnerType === 'Client'
+        ? 'Chủ Đầu Tư'
         : (contractors.find(c => c.id === contract.partnerId)?.name || 'Thầu phụ');
       return contract.title.toLowerCase().includes(query) ||
              contract.contractNumber.toLowerCase().includes(query) ||
@@ -76,7 +76,7 @@ export default function DashboardView({
   // --- KPI CALCULATIONS ---
   const totalBudget = useMemo(() => projects.reduce((sum, p) => sum + p.budget, 0), [projects]);
   const totalSpent = useMemo(() => projects.reduce((sum, p) => sum + p.spent, 0), [projects]);
-  
+
   const activeWorkersCount = useMemo(() => employees.filter(e => e.active && e.role !== 'Chỉ huy trưởng' && e.role !== 'Kế toán công trường').length, [employees]);
   const activeStaffCount = useMemo(() => employees.filter(e => e.active).length, [employees]);
 
@@ -136,7 +136,7 @@ export default function DashboardView({
 
   return (
     <div className="space-y-6" id="dashboard-view-root">
-      
+
       {/* Dynamic Corporate Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 p-6 rounded-2xl border border-slate-850 shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-white">
         <div className="space-y-1">
@@ -149,11 +149,11 @@ export default function DashboardView({
           </h1>
           <p className="text-xs text-slate-300 font-medium flex items-center gap-1.5 mt-1">
             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>{companyConfig?.siteOffice || 'Ban điều hành dã chiến'}</span>
+            <span>{companyConfig?.siteOffice || 'Ban điều hành '}</span>
           </p>
         </div>
         <div className="flex flex-col md:items-end font-mono text-[10px] bg-slate-950/40 p-3 rounded-xl border border-slate-850 shrink-0 gap-1 text-slate-300">
-          <div>ỨNG DỤNG: <strong className="text-blue-450 uppercase">{companyConfig?.appTitle || 'CONSTRUCT-OS'}</strong></div>
+          <div>ỨNG DỤNG: <strong className="text-blue-450 uppercase">{companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}</strong></div>
           <div>PHIÊN BẢN: <strong className="text-slate-200">1.0 STANDARD</strong></div>
           <div>NGƯỜI KÝ DUYỆT CHÍNH: <strong className="text-emerald-400">{companyConfig?.directorName || 'Đỗ Minh Tuấn'}</strong></div>
         </div>
@@ -217,8 +217,8 @@ export default function DashboardView({
 
         {/* Anomaly Alerts */}
         <div className={`p-4 rounded-xl border shadow-sm flex items-center justify-between transition-all ${
-          materialWarningsCount > 0 
-            ? 'bg-rose-50 border-rose-200 text-rose-950 animate-pulse' 
+          materialWarningsCount > 0
+            ? 'bg-rose-50 border-rose-200 text-rose-950 animate-pulse'
             : 'bg-white border-slate-200 text-slate-900'
         }`}>
           <div className="space-y-1">
@@ -238,7 +238,7 @@ export default function DashboardView({
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Project Financial P&L Chart */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col h-[350px]">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-1.5">
@@ -254,9 +254,9 @@ export default function DashboardView({
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#9ca3af" />
                 <YAxis tick={{ fontSize: 10 }} stroke="#9ca3af" />
-                <Tooltip 
+                <Tooltip
                   formatter={(value) => [`${value} tỷ VND`, '']}
-                  contentStyle={{ fontSize: '11px', borderRadius: '8px' }} 
+                  contentStyle={{ fontSize: '11px', borderRadius: '8px' }}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px' }} />
                 <Bar dataKey="Ngân sách" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -293,7 +293,7 @@ export default function DashboardView({
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            
+
             {/* Custom Legend for Pie */}
             <div className="absolute bottom-0 left-0 right-0 grid grid-cols-3 gap-1.5 text-[10px] text-slate-500 font-medium px-2">
               {pieData.map((item, index) => (
@@ -313,7 +313,7 @@ export default function DashboardView({
           <CheckCircle className="w-4.5 h-4.5 text-emerald-600" />
           Hợp Đồng & Thanh Toán Thu/Trả thực tế
         </h3>
-        
+
         <div className="overflow-x-auto border border-slate-200 rounded-lg">
           <table className="min-w-full divide-y divide-slate-250 text-xs">
             <thead className="bg-slate-50 font-semibold text-slate-600">
@@ -332,10 +332,10 @@ export default function DashboardView({
               {filteredContracts.map((contract) => {
                 // Find project and partner name
                 const proj = projects.find(p => p.id === contract.projectId);
-                const partnerName = contract.partnerType === 'Client' 
-                  ? 'Chủ Đầu Tư' 
+                const partnerName = contract.partnerType === 'Client'
+                  ? 'Chủ Đầu Tư'
                   : (contractors.find(c => c.id === contract.partnerId)?.name || 'Thầu phụ');
-                
+
                 const outstanding = contract.value - contract.paidValue;
 
                 return (
@@ -369,7 +369,7 @@ export default function DashboardView({
 
       {/* Materials Limits vs Real Issuance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* Materials Tracker & Alerts */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -379,7 +379,7 @@ export default function DashboardView({
             </h3>
             <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-semibold flex items-center gap-1">
               <AlertTriangle className="w-3 h-3 text-amber-600" />
-              Kiểm soát thất thoát dã chiến
+              Kiểm soát thất thoát
             </span>
           </div>
 
@@ -403,10 +403,10 @@ export default function DashboardView({
                       <span className="font-bold text-slate-900">{limit.actualIssuedQty}</span> / <span className="text-slate-500">{limit.plannedQty} {item.unit}</span>
                     </div>
                   </div>
-                  
+
                   {/* Progress bar */}
                   <div className="relative w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className={`h-full rounded-full transition-all duration-300 ${
                         isOver ? 'bg-rose-600' : percentUsed > 85 ? 'bg-amber-500' : 'bg-emerald-500'
                       }`}
@@ -456,7 +456,7 @@ export default function DashboardView({
                         {eq.status === 'In-Use' ? 'Đang chạy máy' : eq.status === 'Available' ? 'Đang rảnh' : 'Đang bảo dưỡng'}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                       <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       <span>{proj ? proj.name : 'Kho tổng doanh nghiệp'}</span>

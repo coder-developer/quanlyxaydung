@@ -1,6 +1,6 @@
 {
-  "name": "CONSTRUCT-OS ERP",
-  "short_name": "CONSTRUCT-OS",
+  "name": "Quản Trị Doanh Nghiệp",
+  "short_name": "Quản Trị DN",
   "description": "Quản lý doanh nghiệp xây dựng và cổng chấm công nhân viên",
   "start_url": "/",
   "display": "standalone",

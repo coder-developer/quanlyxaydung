@@ -15,7 +15,41 @@ if (!jwtSecret || jwtSecret.length < 32) throw new Error('JWT_SECRET phải có 
 if (!process.env.DATABASE_URL) throw new Error('Thiếu DATABASE_URL.');
 
 type Role = 'CEO' | 'Accountant' | 'SiteManager' | 'Auditor' | 'Employee';
-type SessionUser = { id: number; username: string; fullName: string; role: Role; employeeId?: string };
+type SessionUser = { id: number; username: string; fullName: string; role: Role; employeeId?: string; mustChangePassword?: boolean };
+
+type EmployeeAccountSource = { id?: string; code?: string; name?: string; active?: boolean };
+
+async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
+  const defaultPassword = process.env.SEED_EMPLOYEE_PIN || '5555';
+  if (process.env.NODE_ENV === 'production' && defaultPassword.length < 6) {
+    throw new Error('Mật khẩu mặc định của nhân viên trên production phải có ít nhất 6 chữ số.');
+  }
+  const passwordHash = await bcrypt.hash(defaultPassword, 12);
+  let created = 0;
+  for (const employee of employees) {
+    if (employee.active === false) continue;
+    const employeeId = String(employee.code || employee.id || '').trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(employeeId)) continue;
+    const username = employeeId.toLowerCase();
+    const existing = await pool.query('SELECT id,username FROM app_users WHERE employee_id=$1 LIMIT 1', [employeeId]);
+    if (existing.rowCount) {
+      if (existing.rows[0].username === 'nhanvien') {
+        const usernameOwner = await pool.query('SELECT id FROM app_users WHERE username=$1 AND id<>$2 LIMIT 1', [username, existing.rows[0].id]);
+        if (!usernameOwner.rowCount) await pool.query('UPDATE app_users SET username=$1 WHERE id=$2', [username, existing.rows[0].id]);
+      }
+      continue;
+    }
+    const usernameOwner = await pool.query('SELECT id FROM app_users WHERE username=$1 LIMIT 1', [username]);
+    if (usernameOwner.rowCount) continue;
+    await pool.query(
+      `INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin)
+       VALUES($1,$2,'Employee',$3,$4,TRUE)`,
+      [username, String(employee.name || employeeId), passwordHash, employeeId],
+    );
+    created += 1;
+  }
+  return created;
+}
 
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -55,10 +89,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const pin = String(req.body.pin || '');
   if (!username || !/^\d{4,12}$/.test(pin)) return res.status(400).json({ error: 'Thông tin đăng nhập không hợp lệ.' });
-  const result = await pool.query('SELECT id, username, full_name, role, employee_id, pin_hash FROM app_users WHERE username=$1 AND active=TRUE', [username]);
+  const result = await pool.query('SELECT id, username, full_name, role, employee_id, pin_hash, must_change_pin FROM app_users WHERE username=$1 AND active=TRUE', [username]);
   const row = result.rows[0];
-  if (!row || !(await bcrypt.compare(pin, row.pin_hash))) return res.status(401).json({ error: 'Tên đăng nhập hoặc PIN không đúng.' });
-  const user: SessionUser = { id: row.id, username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id || undefined };
+  if (!row || !(await bcrypt.compare(pin, row.pin_hash))) return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' });
+  const user: SessionUser = { id: row.id, username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id || undefined, mustChangePassword: row.must_change_pin };
   await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)', [user.id, 'login']);
   res.json({ token: sign(user), user });
 });
@@ -78,7 +112,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   const linked = await pool.query('SELECT 1 FROM app_users WHERE employee_id=$1', [employee.id]);
   if (linked.rowCount) return res.status(409).json({ error: 'Hồ sơ nhân viên này đã có tài khoản.' });
   try {
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id) VALUES($1,$2,\'Employee\',$3,$4) RETURNING id,username,full_name,role,employee_id', [username, employee.name, await bcrypt.hash(pin, 12), employee.id]);
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,\'Employee\',$3,$4,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin', [username, employee.name, await bcrypt.hash(pin, 12), employee.id]);
     const row = result.rows[0];
     const user: SessionUser = { id: row.id, username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id };
     res.status(201).json({ token: sign(user), user });
@@ -91,10 +125,10 @@ app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => 
   const user = res.locals.user as SessionUser;
   const currentPin = String(req.body.currentPin || '');
   const newPin = String(req.body.newPin || '');
-  if (!/^\d{6,12}$/.test(newPin) || currentPin === newPin) return res.status(400).json({ error: 'PIN mới phải có 6–12 chữ số và khác PIN hiện tại.' });
+  if (!/^\d{6,12}$/.test(newPin) || currentPin === newPin) return res.status(400).json({ error: 'Mật khẩu mới phải có 6–12 chữ số và khác mật khẩu hiện tại.' });
   const result = await pool.query('SELECT pin_hash FROM app_users WHERE id=$1 AND active=TRUE', [user.id]);
-  if (!result.rows[0] || !(await bcrypt.compare(currentPin, result.rows[0].pin_hash))) return res.status(401).json({ error: 'PIN hiện tại không đúng.' });
-  await pool.query('UPDATE app_users SET pin_hash=$1 WHERE id=$2', [await bcrypt.hash(newPin, 12), user.id]);
+  if (!result.rows[0] || !(await bcrypt.compare(currentPin, result.rows[0].pin_hash))) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng.' });
+  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=FALSE WHERE id=$2', [await bcrypt.hash(newPin, 12), user.id]);
   await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)', [user.id, 'pin_changed']);
   res.json({ success: true });
 });
@@ -134,16 +168,16 @@ app.post('/api/admin/sync-business-ids', authenticate, requireRoles('CEO', 'Acco
 });
 
 app.get('/api/admin/users', authenticate, requireRoles('CEO'), async (_req, res) => {
-  const result = await pool.query('SELECT id,username,full_name,role,employee_id,active,created_at FROM app_users ORDER BY created_at DESC');
+  const result = await pool.query('SELECT id,username,full_name,role,employee_id,must_change_pin,active,created_at FROM app_users ORDER BY created_at DESC');
   res.json(result.rows);
 });
 
 app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res) => {
   const { username, fullName, employeeId, role = 'Employee', pin } = req.body;
-  if (!/^[a-z0-9._-]{3,32}$/.test(String(username || '')) || !/^\d{6,12}$/.test(String(pin || ''))) return res.status(400).json({ error: 'Tên đăng nhập hoặc PIN không hợp lệ.' });
+  if (!/^[a-z0-9._-]{3,32}$/.test(String(username || '')) || !/^\d{6,12}$/.test(String(pin || ''))) return res.status(400).json({ error: 'Tên đăng nhập hoặc mật khẩu không hợp lệ.' });
   const hash = await bcrypt.hash(String(pin), 12);
   try {
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id) VALUES($1,$2,$3,$4,$5) RETURNING id,username,full_name,role,employee_id,active', [username, fullName, role, hash, employeeId || null]);
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, fullName, role, hash, employeeId || null]);
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không tạo được tài khoản.' });
@@ -157,9 +191,16 @@ app.patch('/api/admin/users/:id/status', authenticate, requireRoles('CEO'), asyn
 
 app.post('/api/admin/users/:id/reset-pin', authenticate, requireRoles('CEO'), async (req, res) => {
   const pin = String(req.body.pin || '');
-  if (!/^\d{6,12}$/.test(pin)) return res.status(400).json({ error: 'PIN phải có 6–12 chữ số.' });
-  await pool.query('UPDATE app_users SET pin_hash=$1 WHERE id=$2', [await bcrypt.hash(pin, 12), req.params.id]);
+  if (!/^\d{6,12}$/.test(pin)) return res.status(400).json({ error: 'Mật khẩu phải có 6–12 chữ số.' });
+  await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=TRUE WHERE id=$2', [await bcrypt.hash(pin, 12), req.params.id]);
   res.json({ success: true });
+});
+
+app.post('/api/admin/provision-employees', authenticate, requireRoles('CEO'), async (_req, res) => {
+  const state = await pool.query('SELECT payload FROM erp_state WHERE id=1');
+  const employees = Array.isArray(state.rows[0]?.payload?.employees) ? state.rows[0].payload.employees : [];
+  const created = await provisionEmployeeAccounts(employees);
+  res.json({ success: true, created, totalEmployees: employees.filter((item: EmployeeAccountSource) => item.active !== false).length });
 });
 
 app.delete('/api/admin/users/:id', authenticate, requireRoles('CEO'), async (req, res) => {
@@ -301,6 +342,9 @@ app.put('/api/state', authenticate, async (req, res) => {
   );
   if (!result.rowCount) return res.status(409).json({ error: 'Dữ liệu trên máy chủ đã thay đổi. Hãy tải lại trước khi lưu.', code: 'REVISION_CONFLICT' });
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'state_updated', { revision: result.rows[0].revision }]);
+  if (Array.isArray(permittedPayload.employees) && ['CEO', 'Accountant'].includes(user.role)) {
+    await provisionEmployeeAccounts(permittedPayload.employees);
+  }
   res.json(result.rows[0]);
 });
 
@@ -315,11 +359,10 @@ const seeds: Array<[string, string, Role, string, string?]> = [
   ['ketoan', 'Kế toán trưởng', 'Accountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
   ['chihuy', 'Chỉ huy trưởng', 'SiteManager', process.env.SEED_SITE_MANAGER_PIN || '3333'],
   ['kiemtoan', 'Kiểm toán viên', 'Auditor', process.env.SEED_AUDITOR_PIN || '4444'],
-  ['nhanvien', 'Nguyễn Văn Mạnh', 'Employee', process.env.SEED_EMPLOYEE_PIN || '5555', 'NV-001'],
 ];
 for (const [username, fullName, role, pin, employeeId] of seeds) {
   if (process.env.NODE_ENV === 'production' && (!pin || pin === 'CHANGE_ME' || pin.length < 6)) {
-    throw new Error(`PIN production cho tài khoản ${username} phải có ít nhất 6 chữ số và không được để mặc định.`);
+    throw new Error(`Mật khẩu production cho tài khoản ${username} phải có ít nhất 6 chữ số và không được để mặc định.`);
   }
   const hash = await bcrypt.hash(pin, 12);
   await pool.query(
@@ -328,8 +371,12 @@ for (const [username, fullName, role, pin, employeeId] of seeds) {
   );
 }
 
+const stateForAccounts = await pool.query('SELECT payload FROM erp_state WHERE id=1');
+const employeesForAccounts = Array.isArray(stateForAccounts.rows[0]?.payload?.employees) ? stateForAccounts.rows[0].payload.employees : [];
+await provisionEmployeeAccounts(employeesForAccounts);
+
 if (!process.env.VERCEL) {
-  app.listen(port, '0.0.0.0', () => console.log(`CONSTRUCT-OS listening on :${port}`));
+  app.listen(port, '0.0.0.0', () => console.log(`Quản Trị Doanh Nghiệp listening on :${port}`));
 }
 
 export default app;

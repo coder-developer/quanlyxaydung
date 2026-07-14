@@ -3,7 +3,7 @@ import type { UserRole } from '../types';
 const TOKEN_KEY = 'erp_api_token';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-export interface ApiUser { id: number; username: string; fullName: string; role: UserRole; employeeId?: string }
+export interface ApiUser { id: number; username: string; fullName: string; role: UserRole; employeeId?: string; mustChangePassword?: boolean }
 export interface ServerState<T> { revision: number; payload: T; updated_at: string }
 
 export async function apiLogin(username: string, pin: string) {

@@ -50,9 +50,9 @@
   "main": "desktop/main.cjs",
   "build": {
     "appId": "vn.constructos.erp",
-    "productName": "CONSTRUCT-OS ERP",
+    "productName": "Quản Trị Doanh Nghiệp",
     "files": ["desktop/**/*"],
-    "win": { "target": "portable", "artifactName": "CONSTRUCT-OS-ERP-Windows-${version}.exe" },
+    "win": { "target": "portable", "artifactName": "Quan-Tri-Doanh-Nghiep-Windows-${version}.exe" },
     "directories": { "output": "release/windows" }
   }
 }

@@ -45,7 +45,7 @@ const WorkforceAdmin = lazy(() => import('./components/WorkforceAdmin'));
 const MasterDataEditor = lazy(() => import('./components/MasterDataEditor'));
 
 // Icons
-import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, HelpCircle, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, ShieldAlert, LogOut } from 'lucide-react';
+import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, LogOut } from 'lucide-react';
 
 export default function App() {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
@@ -153,16 +153,16 @@ export default function App() {
     }
     return {
       companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      siteOffice: 'BĐH Công trường dã chiến - Dự án cao tốc Bắc Nam',
+      siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
       directorName: 'Đỗ Minh Tuấn',
       chiefAccountantName: 'Nguyễn Thị Thanh Hà',
       treasurerName: 'Lê Thị Thu',
       technicianName: 'Trần Hải Nam',
       journalTitle: 'SỔ NHẬT KÝ CHUNG',
       dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU DÃ CHIẾN',
+      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
       maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-      appTitle: 'CONSTRUCT-OS',
+      appTitle: 'Quản Trị Doanh Nghiệp',
       siteManagerApprovalLimit: 50000000,
       accountantApprovalLimit: 200000000,
       fuelVarianceThreshold: 5,
@@ -846,7 +846,7 @@ export default function App() {
               type: 'Expense',
               category: 'Labor',
               amount,
-              description: `Tạm ứng lương dã chiến tuần cho tổ cốp pha theo phê duyệt #${req.id}`,
+              description: `Tạm ứng lương tuần cho tổ cốp pha theo phê duyệt #${req.id}`,
               date: new Date().toISOString().split('T')[0],
               referenceId: req.id
             };
@@ -916,16 +916,16 @@ export default function App() {
 
     setCompanyConfig({
       companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      siteOffice: 'BĐH Công trường dã chiến - Dự án cao tốc Bắc Nam',
+      siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
       directorName: 'Đỗ Minh Tuấn',
       chiefAccountantName: 'Nguyễn Thị Thanh Hà',
       treasurerName: 'Lê Thị Thu',
       technicianName: 'Trần Hải Nam',
       journalTitle: 'SỔ NHẬT KÝ CHUNG',
       dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU DÃ CHIẾN',
+      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
       maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-      appTitle: 'CONSTRUCT-OS',
+      appTitle: 'Quản Trị Doanh Nghiệp',
       siteManagerApprovalLimit: 50000000,
       accountantApprovalLimit: 200000000,
       fuelVarianceThreshold: 5,
@@ -955,7 +955,7 @@ export default function App() {
   ) => {
     return (value: React.SetStateAction<T>) => {
       if (currentUserRole === 'Auditor') {
-        setPermissionDeniedMsg(`Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu dã chiến. Tất cả các hành động thêm mới, sửa đổi hoặc xóa đối với "${entityName}" đều bị từ chối.`);
+        setPermissionDeniedMsg(`Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu. Tất cả các hành động thêm mới, sửa đổi hoặc xóa đối với "${entityName}" đều bị từ chối.`);
         return;
       }
       if (!allowedRoles.includes(currentUserRole)) {
@@ -985,7 +985,7 @@ export default function App() {
 
   const securedHandleCheckIn = useCallback((newTimesheet: Timesheet) => {
     if (currentUserRole === 'Auditor') {
-      setPermissionDeniedMsg('Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu dã chiến. Không thể thực hiện chấm công giả lập.');
+      setPermissionDeniedMsg('Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu. Không thể thực hiện chấm công giả lập.');
       return;
     }
     handleCheckIn(newTimesheet);
@@ -993,7 +993,7 @@ export default function App() {
 
   const securedHandleDispatchMachine = useCallback((equipId: string, projId: string) => {
     if (currentUserRole === 'Auditor') {
-      setPermissionDeniedMsg('Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu dã chiến. Không thể điều động thiết bị.');
+      setPermissionDeniedMsg('Chế độ "Thanh tra / Khách" chỉ cho phép xem dữ liệu. Không thể điều động thiết bị.');
       return;
     }
     handleDispatchMachine(equipId, projId);
@@ -1008,7 +1008,7 @@ export default function App() {
   const securedSetTimesheets = useMemo(() => secureSetState(setTimesheets, ['CEO', 'Accountant', 'SiteManager', 'Employee'], 'Bảng Chấm công'), [secureSetState, setTimesheets]);
   const securedSetLaborContracts = useMemo(() => secureSetState(setLaborContracts, ['CEO', 'Accountant'], 'Hợp đồng Lao động'), [secureSetState, setLaborContracts]);
   const securedSetConstructionTasks = useMemo(() => secureSetState(setConstructionTasks, ['CEO', 'Accountant', 'SiteManager'], 'Nhiệm vụ thi công'), [secureSetState, setConstructionTasks]);
-  const securedSetInventoryItems = useMemo(() => secureSetState(setInventoryItems, ['CEO', 'Accountant', 'SiteManager'], 'Kho vật tư dã chiến'), [secureSetState, setInventoryItems]);
+  const securedSetInventoryItems = useMemo(() => secureSetState(setInventoryItems, ['CEO', 'Accountant', 'SiteManager'], 'Kho vật tư'), [secureSetState, setInventoryItems]);
   const securedSetInventoryLedger = useMemo(() => secureSetState(setInventoryLedger, ['CEO', 'Accountant', 'SiteManager'], 'Nhật ký xuất nhập kho'), [secureSetState, setInventoryLedger]);
   const securedSetMaterialLimits = useMemo(() => secureSetState(setMaterialLimits, ['CEO', 'Accountant', 'SiteManager'], 'Định mức hạn mức vật tư'), [secureSetState, setMaterialLimits]);
   const securedSetCompanyConfig = useMemo(() => secureSetState(setCompanyConfig, ['CEO'], 'Thông tin Doanh nghiệp'), [secureSetState, setCompanyConfig]);
@@ -1018,7 +1018,7 @@ export default function App() {
     return (
       <LoginScreen
         onLoginSuccess={handleLoginSuccess}
-        appTitle={companyConfig?.appTitle || 'CONSTRUCT-OS'}
+        appTitle={companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}
         companyName={companyConfig?.companyName}
       />
     );
@@ -1053,11 +1053,11 @@ export default function App() {
         <div className="p-4 md:p-6 flex items-center justify-between md:justify-start gap-3 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white text-base tracking-wider">
-              {(companyConfig?.appTitle || 'CONSTRUCT-OS').substring(0, 1).toUpperCase()}
+              {(companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp').substring(0, 1).toUpperCase()}
             </div>
             <div className="flex flex-col">
               <span className="text-white font-bold text-sm md:text-base tracking-tight leading-none uppercase">
-                {companyConfig?.appTitle || 'CONSTRUCT-OS'}
+                {companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}
               </span>
               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-1">STANDARD V1.0</span>
             </div>
@@ -1170,7 +1170,7 @@ export default function App() {
           <button onClick={() => handleTabClick('masterdata', 'Dữ liệu danh mục')} className={`flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'masterdata' ? 'bg-blue-600 text-white shadow-xs' : isTabRestricted('masterdata') ? 'text-slate-600 opacity-55' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><div className="flex items-center gap-2.5 md:gap-3"><Database className="w-4 h-4 shrink-0"/><span>Dữ liệu danh mục</span></div></button>
 
           <button
-            onClick={() => handleTabClick('warehouse', 'Kho vật tư dã chiến')}
+            onClick={() => handleTabClick('warehouse', 'Kho vật tư')}
             className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'warehouse'
                 ? 'bg-blue-600 text-white shadow-xs'
@@ -1181,7 +1181,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2.5 md:gap-3">
               <Boxes className="w-4 h-4 shrink-0" />
-              <span>Kho vật tư dã chiến</span>
+              <span>Kho vật tư</span>
             </div>
             {isTabRestricted('warehouse') && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
           </button>
@@ -1273,7 +1273,7 @@ export default function App() {
               <span className="text-[8px] text-blue-400 uppercase tracking-wider font-bold mt-1">
                 {currentUserRole === 'CEO' && 'Giám đốc Điều hành'}
                 {currentUserRole === 'Accountant' && 'Kế toán trưởng'}
-                {currentUserRole === 'SiteManager' && 'Chỉ huy dã chiến'}
+                {currentUserRole === 'SiteManager' && 'Chỉ huy trưởng'}
                 {currentUserRole === 'Auditor' && 'Đoàn Thanh tra'}
               </span>
             </div>
@@ -1297,8 +1297,8 @@ export default function App() {
               {activeTab === 'hr' && '👥 Quản Lý Nhân Sự, Chấm Công & Hợp Đồng'}
               {activeTab === 'workforce' && '🧭 Vận Hành Nhân Sự & Phê Duyệt'}
               {activeTab === 'masterdata' && '🗂️ Chỉnh Sửa Dữ Liệu Danh Mục'}
-              {activeTab === 'warehouse' && '📦 Quản Lý Kho Vật Tư Dã Chiến & Định Mức'}
-              {activeTab === 'equipment' && '🚜 Quản Lý Cấp Phát Thiết Bị & Dụng Cụ Dã Chiến'}
+              {activeTab === 'warehouse' && '📦 Quản Lý Kho Vật Tư & Định Mức'}
+              {activeTab === 'equipment' && '🚜 Quản Lý Cấp Phát Thiết Bị & Dụng Cụ'}
               {activeTab === 'sim' && '🏗️ Trình Mô Phỏng Live Operations & Triggers'}
               {activeTab === 'company' && '🏢 Cấu Hình Thông Tin Doanh Nghiệp & Tiêu Đề Phiếu In'}
             </h1>
@@ -1482,34 +1482,6 @@ export default function App() {
         {/* Content Body Area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50">
           <div className="max-w-7xl mx-auto space-y-6">
-
-            {/* Role Warning & Info Banners */}
-            {currentUserRole === 'Auditor' && (
-              <div className="bg-amber-50/85 border border-amber-250 rounded-xl p-4 flex gap-3 text-amber-950 border-l-4 border-l-amber-500 shadow-3xs animate-fade-in" id="auditor-warning-banner">
-                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs">
-                  <span className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800 block">
-                    🔍 CHẾ ĐỘ THÀNH VIÊN TRUY CẬP CHỈ ĐỌC (AUDITOR MODE)
-                  </span>
-                  <p className="font-semibold text-amber-700 leading-relaxed">
-                    Bạn hiện đang truy cập với vai trò **Thanh tra / Khách độc lập**. Tất cả các tính năng thêm mới, chỉnh sửa, xóa và phê duyệt dữ liệu đều bị khóa để bảo vệ hệ thống. Bạn có thể sử dụng dropdown "Vai trò" ở góc trên bên phải để chuyển sang <strong>CEO</strong> hoặc <strong>Kế toán trưởng</strong> để nhập dữ liệu.
-                  </p>
-                </div>
-              </div>
-            )}
-            {currentUserRole === 'SiteManager' && (
-              <div className="bg-blue-50/85 border border-blue-250 rounded-xl p-4 flex gap-3 text-blue-950 border-l-4 border-l-blue-500 shadow-3xs animate-fade-in" id="sitemanager-warning-banner">
-                <ShieldAlert className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs">
-                  <span className="font-extrabold text-[10px] uppercase tracking-wider text-blue-800 block">
-                    🚧 PHÂN QUYỀN CHỈ HUY TRƯỞNG CÔNG TRƯỜNG (SITE MANAGER)
-                  </span>
-                  <p className="font-semibold text-blue-700 leading-relaxed">
-                    Bạn hiện được phân quyền quản lý **Kho vật tư dã chiến, Thiết bị & Mô phỏng**. Các phân hệ tài chính nhạy cảm (Sổ nhật ký kế toán, Công nợ thầu phụ, Nhân sự & Tiền lương) tạm thời bị khóa. Bạn có thể sử dụng dropdown ở trên để chuyển sang <strong>CEO</strong> hoặc <strong>Kế toán trưởng</strong> để trải nghiệm toàn quyền.
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Header Mini Dashboard Quick Stats */}
             {activeTab === 'dashboard' && (
@@ -1702,10 +1674,10 @@ export default function App() {
             <footer className="pt-8 border-t border-slate-200 text-slate-400 text-xs flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pb-6">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-semibold text-slate-500">CONSTRUCT-OS ERP • Quản lý doanh nghiệp xây dựng</span>
+                <span className="font-semibold text-slate-500">Quản Trị Doanh Nghiệp • Hệ thống quản trị tập trung</span>
               </div>
               <div className="text-center sm:text-right text-[10px] space-y-0.5 font-medium text-slate-400">
-                <p>Hệ thống Đạt chuẩn ACID Kế toán | Chống thất thoát vật tư dã chiến</p>
+                <p>Hệ thống đạt chuẩn ACID kế toán | Kiểm soát thất thoát vật tư</p>
                 <p className="text-slate-300">© 2026 ERP Construction. All rights reserved.</p>
               </div>
             </footer>
@@ -1829,7 +1801,7 @@ export default function App() {
                       <div>
                         <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                           <Wrench className="w-3.5 h-3.5 text-emerald-500" />
-                          Thiết bị thi công dã chiến đang điều động ({activeEqs.length})
+                          Thiết bị thi công đang điều động ({activeEqs.length})
                         </h4>
                         {activeEqs.length > 0 ? (
                           <div className="grid grid-cols-2 gap-2 max-h-24 overflow-y-auto">
@@ -2097,7 +2069,7 @@ export default function App() {
                   }}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
                 >
-                  <span>Xem vật tư trên Kho dã chiến</span>
+                  <span>Xem vật tư trong kho</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               )}

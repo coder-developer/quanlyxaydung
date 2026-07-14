@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Project, FinancialTransaction, InventoryLedger, Timesheet, Equipment, CompanyConfig, UserRole } from '../types';
-import { 
-  BookOpen, Search, Filter, Calendar, PlusCircle, ArrowUpDown, 
-  Download, RefreshCw, FileSpreadsheet, CheckCircle2, TrendingUp, 
-  TrendingDown, Coins, AlertCircle, Info
+import {
+  BookOpen, Search, Filter, Calendar, PlusCircle, ArrowUpDown,
+  Download, RefreshCw, FileSpreadsheet, CheckCircle2, TrendingUp,
+  TrendingDown, Coins, AlertCircle
 } from 'lucide-react';
 
 // Vietnamese Standard Chart of Accounts (Hệ thống tài khoản Thông tư 200)
@@ -13,7 +13,7 @@ export const CHART_OF_ACCOUNTS: Record<string, string> = {
   '131': 'Phải thu của khách hàng (Chủ đầu tư)',
   '141': 'Tạm ứng cho nhân viên công trường',
   '152': 'Nguyên vật liệu (Sắt, thép, xi măng, cát, đá...)',
-  '153': 'Công cụ, dụng cụ dã chiến (Máy khoan, búa, đồ bảo hộ...)',
+  '153': 'Công cụ, dụng cụ (máy khoan, búa, đồ bảo hộ...)',
   '211': 'Tài sản cố định hữu hình (Cần cẩu, máy xúc xích...)',
   '2141': 'Hao mòn tài sản cố định hữu hình (Khấu hao)',
   '331': 'Phải trả cho người bán (Nhà thầu phụ/Nhà cung cấp)',
@@ -147,7 +147,7 @@ export default function JournalManager({
           credit = '331';
         } else if (tx.category === 'Labor') {
           debit = '622'; // Chi phí nhân công trực tiếp
-          credit = '334'; // Lương nhân công dã chiến
+          credit = '334'; // Lương nhân công
         } else if (tx.category === 'Equipment') {
           debit = '627'; // Máy thi công
           credit = '1111'; // Thanh toán tiền mặt/xăng dầu
@@ -180,7 +180,7 @@ export default function JournalManager({
     inventoryLedger.forEach(ledger => {
       if (ledger.type === 'Issue') {
         const proj = projects.find(p => p.id === ledger.projectId);
-        const projName = proj ? proj.name : 'Ban dã chiến';
+        const projName = proj ? proj.name : 'Ban ';
         const rawItemName = ledger.sourceOrDestination || 'Cấp phát vật tư';
 
         rows.push({
@@ -200,7 +200,7 @@ export default function JournalManager({
         // Direct warehouse receipt (not from approved PO triggers already mapped in transactions)
         // Nợ 152 (Nguyên vật liệu) / Có 331 (Phải trả nhà cung cấp)
         const proj = projects.find(p => p.id === ledger.projectId);
-        const projName = proj ? proj.name : 'Kho dã chiến';
+        const projName = proj ? proj.name : 'Kho ';
 
         rows.push({
           id: `row-ledger-rec-${ledger.id}`,
@@ -292,9 +292,9 @@ export default function JournalManager({
       row.sourceModule
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' 
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF'
       + [headers.join(','), ...csvRows.map(e => e.join(','))].join('\n');
-    
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -309,14 +309,14 @@ export default function JournalManager({
   const handleExportExcel = () => {
     const today = new Date();
     const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-    const periodStr = startDate && endDate 
-      ? `Từ ngày ${startDate.split('-').reverse().join('/')} đến ngày ${endDate.split('-').reverse().join('/')}` 
+    const periodStr = startDate && endDate
+      ? `Từ ngày ${startDate.split('-').reverse().join('/')} đến ngày ${endDate.split('-').reverse().join('/')}`
       : `Kỳ báo cáo: Năm ${today.getFullYear()}`;
 
     const cName = companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT';
-    const sOffice = companyConfig?.siteOffice || 'BĐH Công trường dã chiến - Dự án cao tốc Bắc Nam';
+    const sOffice = companyConfig?.siteOffice || 'Ban điều hành - Dự án cao tốc Bắc Nam';
     const jTitle = companyConfig?.journalTitle || 'SỔ NHẬT KÝ CHUNG';
-    const treasurerName = companyConfig?.treasurerName || 'Kế toán viên dã chiến';
+    const treasurerName = companyConfig?.treasurerName || 'Kế toán viên ';
     const chiefAccountant = companyConfig?.chiefAccountantName || 'Nguyễn Thị Thanh Hà';
     const directorName = companyConfig?.directorName || 'Giám đốc Đỗ Minh Tuấn';
 
@@ -348,18 +348,18 @@ export default function JournalManager({
   .title { font-size: 16pt; font-weight: bold; text-align: center; margin-top: 15px; text-transform: uppercase; }
   .period { font-size: 11pt; font-style: italic; text-align: center; margin-bottom: 20px; }
   .currency { font-size: 10pt; font-style: italic; text-align: right; margin-bottom: 5px; }
-  
+
   table { border-collapse: collapse; width: 100%; margin-top: 5px; }
   th { border: 1px solid #000000; padding: 8px 4px; font-size: 10pt; font-weight: bold; text-align: center; background-color: #cbd5e1; }
   td { border: 1px solid #000000; padding: 6px 4px; font-size: 10pt; }
-  
+
   .text-center { text-align: center; }
   .text-right { text-align: right; }
   .text-left { text-align: left; }
   .font-bold { font-weight: bold; }
   .font-italic { font-style: italic; }
   .bg-total { background-color: #f1f5f9; font-weight: bold; }
-  
+
   .signature-table { width: 100%; margin-top: 40px; border: none; }
   .signature-table td { border: none; text-align: center; font-size: 10.5pt; padding-top: 5px; }
   .sig-title { font-weight: bold; }
@@ -429,7 +429,7 @@ export default function JournalManager({
     filteredRows.forEach((row) => {
       const formattedPostDate = row.postingDate.split('-').reverse().join('/');
       const formattedVoucherDate = row.voucherDate.split('-').reverse().join('/');
-      
+
       // Debit Row
       html += `
     <tr>
@@ -447,7 +447,7 @@ export default function JournalManager({
     </tr>
       `;
       runningIndex++;
-      
+
       // Credit Row
       html += `
     <tr>
@@ -465,7 +465,7 @@ export default function JournalManager({
     </tr>
       `;
       runningIndex++;
-      
+
       sumDebit += row.amount;
       sumCredit += row.amount;
     });
@@ -487,7 +487,7 @@ export default function JournalManager({
 <table class="signature-table" style="width:100%; border:none; margin-top:30px;">
   <tr style="border:none;">
     <td colspan="4" style="border:none;"></td>
-    <td colspan="7" class="font-italic text-center" style="border:none; padding-bottom: 10px;">Lập ngày ${dateStr} tại Ban điều hành dã chiến</td>
+    <td colspan="7" class="font-italic text-center" style="border:none; padding-bottom: 10px;">Lập ngày ${dateStr} tại Ban điều hành </td>
   </tr>
   <tr style="border:none;">
     <td colspan="3" style="border:none; text-align:center; width:25%;">
@@ -524,7 +524,7 @@ export default function JournalManager({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('Đã xuất thành công Sổ Nhật ký chung dã chiến chuẩn Mẫu S03a-DN (.xls)!');
+    showToast('Đã xuất thành công Sổ Nhật ký chung chuẩn Mẫu S03a-DN (.xls)!');
   };
 
   // Filtering Rows based on user inputs
@@ -532,7 +532,7 @@ export default function JournalManager({
     return derivedJournalRows.filter(row => {
       // Search Box Filter
       const searchLower = searchQuery.toLowerCase();
-      const matchSearch = 
+      const matchSearch =
         row.description.toLowerCase().includes(searchLower) ||
         row.voucherNo.toLowerCase().includes(searchLower) ||
         row.debitAccount.includes(searchQuery) ||
@@ -583,7 +583,7 @@ export default function JournalManager({
 
   return (
     <div className="space-y-6" id="journal-manager-root">
-      
+
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-xl font-bold flex items-center gap-2 text-xs border border-emerald-500 animate-slide-in">
@@ -594,7 +594,7 @@ export default function JournalManager({
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        
+
         <div className="bg-slate-900 text-white p-5 rounded-xl border border-slate-800 shadow-sm relative overflow-hidden">
           <div className="absolute top-3 right-3 opacity-10">
             <BookOpen className="w-16 h-16" />
@@ -616,7 +616,7 @@ export default function JournalManager({
           </h2>
           <div className="flex items-center gap-1.5 text-[10px] text-rose-500 font-semibold mt-3">
             <TrendingUp className="w-3 h-3 text-rose-500" />
-            <span>Chi phí hạch toán thực tế dã chiến</span>
+            <span>Chi phí hạch toán thực tế </span>
           </div>
         </div>
 
@@ -627,7 +627,7 @@ export default function JournalManager({
           </h2>
           <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-semibold mt-3">
             <Coins className="w-3 h-3 text-emerald-600" />
-            <span>Chi lương công nhân dã chiến & thợ hồ</span>
+            <span>Chi lương công nhân & thợ hồ</span>
           </div>
         </div>
 
@@ -647,7 +647,7 @@ export default function JournalManager({
       {/* Filter Toolbar Card */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-          
+
           {/* Left search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -691,7 +691,7 @@ export default function JournalManager({
 
         {/* Detailed Dropdown Filters */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-slate-100 text-[10px] font-bold text-slate-500">
-          
+
           <div>
             <label className="block mb-1.5 text-slate-400 uppercase tracking-widest">Dự án công trình</label>
             <select
@@ -762,7 +762,7 @@ export default function JournalManager({
 
       {/* Sổ Nhật Ký Chung Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        
+
         {/* Table Title and Metadata */}
         <div className="bg-slate-900 text-white px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-2 border-b border-slate-800">
           <div className="flex items-center gap-2">
@@ -822,10 +822,10 @@ export default function JournalManager({
                       <td className="py-3.5 px-4 text-slate-800 font-medium max-w-sm truncate" title={row.description}>
                         {row.description}
                       </td>
-                      
+
                       {/* Debit Account */}
                       <td className="py-3.5 px-3 text-center">
-                        <span 
+                        <span
                           className="font-mono px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold text-slate-700 cursor-help"
                           title={CHART_OF_ACCOUNTS[row.debitAccount] || 'Tài khoản chưa định nghĩa'}
                         >
@@ -835,7 +835,7 @@ export default function JournalManager({
 
                       {/* Credit Account */}
                       <td className="py-3.5 px-3 text-center">
-                        <span 
+                        <span
                           className="font-mono px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-bold text-slate-700 cursor-help"
                           title={CHART_OF_ACCOUNTS[row.creditAccount] || 'Tài khoản chưa định nghĩa'}
                         >
@@ -867,15 +867,6 @@ export default function JournalManager({
           </table>
         </div>
 
-        {/* Informational Guidelines footer */}
-        <div className="bg-slate-50 p-4 border-t border-slate-150 flex items-start gap-2.5 text-[11px] text-slate-500">
-          <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-bold text-slate-600">💡 Hướng dẫn hệ thống kế toán thông suốt (ACID Compliant):</p>
-            <p>Hệ thống tự động phát hiện và đồng bộ hóa (Real-time Audit Trace) từ tất cả các hoạt động mua sắm vật tư, nghiệm thu khối lượng thầu phụ, thanh toán từ chủ đầu tư, trả lương tuần dã chiến cho nhân công của các ban chỉ huy công trình. Giảm thiểu 100% rủi ro thất thoát tài chính.</p>
-          </div>
-        </div>
-
       </div>
 
       {/* MODAL: ADD MANUAL DOUBLE ENTRY */}
@@ -887,16 +878,16 @@ export default function JournalManager({
                 <PlusCircle className="w-4 h-4 text-blue-400" />
                 Hạch toán bút toán kép thủ công mới (Thông tư 200)
               </h3>
-              <button 
+              <button
                 onClick={() => setShowAddModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
                 ✕
               </button>
             </div>
-            
+
             <form onSubmit={handleSaveManualEntry} className="p-6 space-y-4 text-xs font-semibold">
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-slate-400 block mb-1">Mã chứng từ *</label>

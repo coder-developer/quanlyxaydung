@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Project, Equipment, FinancialTransaction, CompanyConfig, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
-import { 
-  Wrench, Truck, AlertCircle, Plus, ClipboardList, CheckCircle2, 
+import {
+  Wrench, Truck, AlertCircle, Plus, ClipboardList, CheckCircle2,
   MapPin, HelpCircle, Activity, Gauge, Calendar, DollarSign, PenSquare,
   FileSpreadsheet, Download
 } from 'lucide-react';
@@ -83,7 +83,7 @@ export default function EquipmentManager({
       equipmentId: 'eq-1',
       equipmentName: 'Máy xúc bánh xích Komatsu PC200',
       fromProjectId: 'all',
-      fromProjectName: 'Kho dã chiến',
+      fromProjectName: 'Kho ',
       toProjectId: 'proj-1',
       toProjectName: 'Chung cư cao cấp Green River',
       date: '2026-06-15',
@@ -96,13 +96,13 @@ export default function EquipmentManager({
       equipmentId: 'eq-2',
       equipmentName: 'Xe lu rung Hamm 3411 (11 Tấn)',
       fromProjectId: 'all',
-      fromProjectName: 'Kho dã chiến',
+      fromProjectName: 'Kho ',
       toProjectId: 'proj-4',
       toProjectName: 'Khu đô thị sinh thái EcoGarden',
       date: '2026-06-28',
       cost: 6500000,
       recordedBy: 'Kỹ sư Lâm',
-      carrierUnit: 'Tổng công ty Cứu hộ dã chiến 911'
+    carrierUnit: 'Tổng công ty Cứu hộ 911'
     }
   ]);
 
@@ -115,7 +115,7 @@ export default function EquipmentManager({
   // Modal: Dispatch Equipment
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [dispatchTargetProjId, setDispatchTargetProjId] = useState('');
-  const [dispatchSurcharge, setDispatchSurcharge] = useState<number>(5000000); // 5 triệu vận chuyển xe nâng dã chiến
+  const [dispatchSurcharge, setDispatchSurcharge] = useState<number>(5000000); // 5 triệu vận chuyển xe nâng
 
   // Form: Buy / Rent new Equipment & Tools
   const [procureType, setProcureType] = useState<'Purchase' | 'Rental'>('Purchase');
@@ -172,7 +172,7 @@ export default function EquipmentManager({
   const filteredEquipmentList = useMemo(() => {
     return equipment.filter(eq => {
       const matchProj = filterProject === 'all' || eq.currentProjectId === filterProject;
-      
+
       // Classify "Heavy" vs "Tool"
       // Handheld tools usually don't consume heavy diesel or have electric power rate
       const isTool = eq.name.toLowerCase().includes('đầm dùi') || eq.name.toLowerCase().includes('bộ đàm') || eq.name.toLowerCase().includes('khoan') || eq.name.toLowerCase().includes('búa') || eq.name.toLowerCase().includes('hàn');
@@ -230,7 +230,7 @@ export default function EquipmentManager({
 
     // Find source project details
     const sourceProj = projects.find(p => p.id === eq.currentProjectId);
-    const sourceName = sourceProj ? sourceProj.name : 'Kho dã chiến';
+    const sourceName = sourceProj ? sourceProj.name : 'Kho ';
 
     // 4. Record to dispatch history
     const newDispatchLog: DispatchLog = {
@@ -243,7 +243,7 @@ export default function EquipmentManager({
       toProjectName: targetProj.name,
       date: new Date().toISOString().split('T')[0],
       cost: dispatchSurcharge,
-      recordedBy: 'Điều phối viên dã chiến',
+      recordedBy: 'Điều phối viên ',
       carrierUnit: 'Công ty vận tải cơ giới liên kết 911'
     };
     setDispatchLogs(prev => [newDispatchLog, ...prev]);
@@ -380,10 +380,10 @@ export default function EquipmentManager({
     const logDateStr = log.date.split('-').reverse().join('/');
 
     const cName = companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT';
-    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH DÃ CHIẾN CAO TỐC BẮC NAM';
+    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH CAO TỐC BẮC NAM';
     const dTitle = companyConfig?.dispatchTitle || 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI';
     const directorName = companyConfig?.directorName || 'Giám đốc Đỗ Minh Tuấn';
-    
+
     let html = `
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
@@ -409,12 +409,12 @@ export default function EquipmentManager({
   .national-sub { font-size: 10pt; font-style: italic; text-align: center; border-bottom: 1px solid #000; padding-bottom: 5px; }
   .title { font-size: 15pt; font-weight: bold; text-align: center; margin-top: 20px; text-transform: uppercase; }
   .code { font-size: 10pt; font-style: italic; text-align: center; margin-bottom: 20px; }
-  
+
   table.content-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
   table.content-table td { padding: 8px; font-size: 11pt; border: none; }
   table.content-table td.label { font-weight: bold; width: 30%; }
   table.content-table td.value { border-bottom: 1px dashed #cbd5e1; }
-  
+
   .signature-table { width: 100%; margin-top: 40px; border-collapse: collapse; }
   .signature-table td { border: none; text-align: center; font-size: 11pt; padding-top: 5px; width: 33%; }
   .sig-title { font-weight: bold; }
@@ -442,7 +442,7 @@ export default function EquipmentManager({
 <div class="code">Số: ${log.id}/LĐĐ-BĐH</div>
 
 <p style="font-size: 11pt; font-style: italic; text-align: center;">
-  Căn cứ tiến độ thi công thực tế tại các mũi công trường dã chiến và nhu cầu luân chuyển thiết bị.
+    Căn cứ tiến độ thi công thực tế tại các mũi công trường và nhu cầu luân chuyển thiết bị.
 </p>
 
 <table class="content-table">
@@ -476,7 +476,7 @@ export default function EquipmentManager({
   </tr>
   <tr>
     <td class="label">Mục đích điều động:</td>
-    <td class="value">Phục vụ thi công dầm mố, san gạt dốc dã chiến khẩn cấp theo tiến độ bàn giao.</td>
+      <td class="value">Phục vụ thi công dầm mố, san gạt dốc khẩn cấp theo tiến độ bàn giao.</td>
   </tr>
   <tr>
     <td class="label">Cán bộ lập lệnh:</td>
@@ -485,13 +485,13 @@ export default function EquipmentManager({
 </table>
 
 <p style="font-size: 10.5pt; font-style: italic; margin-top: 25px; line-height: 1.5;">
-  * Ghi chú kỹ thuật: Đơn vị tiếp nhận chịu trách nhiệm kiểm tra hiện trạng máy móc, ký biên bản giao nhận kỹ thuật và ghi nhận chi phí vận hành, ca dầu dã chiến vào phân hệ kế toán theo đúng định mức quy định.
+  * Ghi chú kỹ thuật: Đơn vị tiếp nhận chịu trách nhiệm kiểm tra hiện trạng máy móc, ký biên bản giao nhận kỹ thuật và ghi nhận chi phí vận hành, ca dầu vào phân hệ kế toán theo đúng định mức quy định.
 </p>
 
 <table class="signature-table">
   <tr>
     <td colspan="2"></td>
-    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại BĐH Công trường dã chiến</td>
+    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại BĐH Công trường </td>
   </tr>
   <tr>
     <td>
@@ -536,12 +536,12 @@ export default function EquipmentManager({
     const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
     const logDateStr = log.date.split('-').reverse().join('/');
     const eq = equipment.find(e => e.id === log.equipmentId);
-    const eqName = eq ? eq.name : 'Thiết bị dã chiến';
-    const projName = eq ? (projects.find(p => p.id === eq.currentProjectId)?.name || 'Kho dã chiến') : 'Mũi thi công dã chiến';
+    const eqName = eq ? eq.name : 'Thiết bị ';
+    const projName = eq ? (projects.find(p => p.id === eq.currentProjectId)?.name || 'Kho ') : 'Mũi thi công ';
 
     const cName = companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT';
-    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH DÃ CHIẾN CAO TỐC BẮC NAM';
-    const fTitle = companyConfig?.fuelTitle || 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU DÃ CHIẾN';
+    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH CAO TỐC BẮC NAM';
+    const fTitle = companyConfig?.fuelTitle || 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU ';
     const directorName = companyConfig?.directorName || 'Giám đốc Đỗ Minh Tuấn';
 
     let html = `
@@ -567,12 +567,12 @@ export default function EquipmentManager({
   .org-name { font-size: 11pt; font-weight: bold; text-transform: uppercase; }
   .title { font-size: 15pt; font-weight: bold; text-align: center; margin-top: 20px; text-transform: uppercase; }
   .code { font-size: 10pt; font-style: italic; text-align: center; margin-bottom: 20px; }
-  
+
   table.content-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
   table.content-table td { padding: 8px; font-size: 11pt; border: none; }
   table.content-table td.label { font-weight: bold; width: 30%; }
   table.content-table td.value { border-bottom: 1px dashed #cbd5e1; }
-  
+
   .signature-table { width: 100%; margin-top: 40px; border-collapse: collapse; }
   .signature-table td { border: none; text-align: center; font-size: 11pt; padding-top: 5px; width: 33%; }
   .sig-title { font-weight: bold; }
@@ -589,7 +589,7 @@ export default function EquipmentManager({
       <div style="font-size: 9.5pt; color:#475569; text-transform: uppercase;">${sOffice}</div>
     </td>
     <td style="width:40%; border:none; text-align: right; font-size: 9.5pt; font-style: italic;">
-      Mẫu số: 02-VT dã chiến<br/>
+      Mẫu số: 02-VT <br/>
       Ký hiệu: PCPNL/ĐV-2026
     </td>
   </tr>
@@ -629,14 +629,10 @@ export default function EquipmentManager({
   </tr>
 </table>
 
-<p style="font-size: 10pt; font-style: italic; margin-top: 25px;">
-  * Lưu ý: Cấp đúng số lượng theo ca máy hoạt động. Lái máy có trách nhiệm bàn giao vỏ can / chỉ số đồng hồ đo giờ (SMR) sau ca trực để đối chiếu hao hụt thực tế.
-</p>
-
 <table class="signature-table">
   <tr>
     <td colspan="2"></td>
-    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại Kho vật tư dã chiến</td>
+    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại Kho vật tư </td>
   </tr>
   <tr>
     <td>
@@ -649,7 +645,7 @@ export default function EquipmentManager({
       <div class="sig-title">Người nhận (Lái máy/Tài xế)</div>
       <div class="sig-sub">(Ký, ghi rõ họ tên)</div>
       <div class="sig-space"></div>
-      <div style="font-weight: bold;">Đại diện lái máy dã chiến</div>
+      <div style="font-weight: bold;">Đại diện lái máy </div>
     </td>
     <td>
       <div class="sig-title">Chỉ huy trưởng duyệt</div>
@@ -682,10 +678,10 @@ export default function EquipmentManager({
     const logDateStr = log.date.split('-').reverse().join('/');
     const eq = equipment.find(e => e.id === log.equipmentId);
     const eqName = eq ? eq.name : 'Thiết bị cơ giới';
-    const projName = eq ? (projects.find(p => p.id === eq.currentProjectId)?.name || 'Kho dã chiến') : 'Mũi thi công';
+    const projName = eq ? (projects.find(p => p.id === eq.currentProjectId)?.name || 'Kho ') : 'Mũi thi công';
 
     const cName = companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT';
-    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH DÃ CHIẾN CAO TỐC BẮC NAM';
+    const sOffice = companyConfig?.siteOffice || 'BAN ĐIỀU HÀNH CAO TỐC BẮC NAM';
     const mTitle = companyConfig?.maintenanceTitle || 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ';
     const directorName = companyConfig?.directorName || 'Giám đốc Đỗ Minh Tuấn';
 
@@ -712,12 +708,12 @@ export default function EquipmentManager({
   .org-name { font-size: 11pt; font-weight: bold; text-transform: uppercase; }
   .title { font-size: 15pt; font-weight: bold; text-align: center; margin-top: 20px; text-transform: uppercase; }
   .code { font-size: 10pt; font-style: italic; text-align: center; margin-bottom: 20px; }
-  
+
   table.content-table { border-collapse: collapse; width: 100%; margin-top: 15px; }
   table.content-table td { padding: 8px; font-size: 11pt; border: none; }
   table.content-table td.label { font-weight: bold; width: 30%; }
   table.content-table td.value { border-bottom: 1px dashed #cbd5e1; }
-  
+
   .signature-table { width: 100%; margin-top: 40px; border-collapse: collapse; }
   .signature-table td { border: none; text-align: center; font-size: 11pt; padding-top: 5px; width: 33%; }
   .sig-title { font-weight: bold; }
@@ -734,7 +730,7 @@ export default function EquipmentManager({
       <div style="font-size: 9.5pt; color:#475569; text-transform: uppercase;">${sOffice}</div>
     </td>
     <td style="width:40%; border:none; text-align: right; font-size: 9.5pt; font-style: italic;">
-      Mẫu số: 08-SCBB dã chiến<br/>
+      Mẫu số: 08-SCBB <br/>
       Ký hiệu: BBBGSC-2026
     </td>
   </tr>
@@ -759,7 +755,7 @@ export default function EquipmentManager({
   <tr>
     <td class="label">Hình thức kỹ thuật:</td>
     <td class="value" style="font-weight: bold;">
-      ${log.type === 'Routine' ? 'Bảo dưỡng định kỳ dã chiến' : (log.type === 'Repair' ? 'Sửa chữa đột xuất - Khắc phục sự cố' : 'Kiểm định chất lượng định kỳ')}
+      ${log.type === 'Routine' ? 'Bảo dưỡng định kỳ ' : (log.type === 'Repair' ? 'Sửa chữa đột xuất - Khắc phục sự cố' : 'Kiểm định chất lượng định kỳ')}
     </td>
   </tr>
   <tr>
@@ -776,7 +772,7 @@ export default function EquipmentManager({
   </tr>
   <tr>
     <td class="label">Đánh giá trạng thái sau bàn giao:</td>
-    <td class="value" style="font-weight: bold; color: #16a34a;">Đạt tiêu chuẩn an toàn kỹ thuật, hệ thống thủy lực và động cơ hoạt động tốt 100% công suất. Đủ điều kiện đưa lại công trường dã chiến hoạt động liên tục.</td>
+    <td class="value" style="font-weight: bold; color: #16a34a;">Đạt tiêu chuẩn an toàn kỹ thuật, hệ thống thủy lực và động cơ hoạt động tốt 100% công suất. Đủ điều kiện đưa lại công trường hoạt động liên tục.</td>
   </tr>
 </table>
 
@@ -787,7 +783,7 @@ export default function EquipmentManager({
 <table class="signature-table">
   <tr>
     <td colspan="2"></td>
-    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại Ban điều hành dã chiến</td>
+    <td class="font-italic text-center" style="font-size: 10pt; padding-bottom: 10px;">Lập ngày ${dateStr} tại Ban điều hành </td>
   </tr>
   <tr>
     <td>
@@ -800,7 +796,7 @@ export default function EquipmentManager({
       <div class="sig-title">Lái máy tiếp nhận</div>
       <div class="sig-sub">(Ký, ghi rõ họ tên)</div>
       <div class="sig-space"></div>
-      <div style="font-weight: bold;">Đại diện lái máy dã chiến</div>
+      <div style="font-weight: bold;">Đại diện lái máy </div>
     </td>
     <td>
       <div class="sig-title">Chỉ huy trưởng phê duyệt</div>
@@ -843,7 +839,7 @@ export default function EquipmentManager({
       return;
     }
     const uniqueId = generatedCode;
-    
+
     // 1. Add equipment to registry list
     const newEq: Equipment = {
       id: uniqueId,
@@ -860,9 +856,9 @@ export default function EquipmentManager({
 
     // 2. Generate Central financial transaction (Purchase / Rental overhead)
     const isDebt = procurePaymentMethod === 'Debt';
-    const desc = procureType === 'Purchase' 
-      ? `Mua mới ${procureCategory === 'Heavy' ? 'Máy móc cơ giới' : 'Công cụ cầm tay dã chiến'} [${procureName}] từ ${procureSupplier || 'NCC Thiết bị'}`
-      : `Thuê dã chiến thiết bị [${procureName}] phục vụ công trình từ ${procureSupplier || 'NCC Thiết bị'}`;
+    const desc = procureType === 'Purchase'
+      ? `Mua mới ${procureCategory === 'Heavy' ? 'Máy móc cơ giới' : 'Công cụ cầm tay '} [${procureName}] từ ${procureSupplier || 'NCC Thiết bị'}`
+      : `Thuê thiết bị [${procureName}] phục vụ công trình từ ${procureSupplier || 'NCC Thiết bị'}`;
 
     const newTx: FinancialTransaction = {
       id: `tx-eq-proc-${Date.now()}`,
@@ -887,7 +883,7 @@ export default function EquipmentManager({
       return p;
     }));
 
-    showToast(`Đã hạch toán và ghi nhận thiết bị dã chiến mới: ${procureName}!`);
+    showToast(`Đã hạch toán và ghi nhận thiết bị mới: ${procureName}!`);
 
     // Reset Form
     setProcureCode('');
@@ -898,7 +894,7 @@ export default function EquipmentManager({
 
   return (
     <div className="space-y-6" id="equipment-manager-root">
-      
+
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-xl font-bold flex items-center gap-2 text-xs border border-emerald-500 animate-slide-in">
@@ -912,7 +908,7 @@ export default function EquipmentManager({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">MÁY MÓC & DỤNG CỤ</p>
           <h2 className="text-xl font-black font-mono text-slate-900 mt-1">{stats.totalCount} thiết bị</h2>
-          <p className="text-[10px] text-slate-400 mt-1">Gồm 3 xe cơ giới & 2 dụng cụ dã chiến</p>
+          <p className="text-[10px] text-slate-400 mt-1">Gồm 3 xe cơ giới & 2 dụng cụ </p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
           <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">ĐANG HOẠT ĐỘNG</p>
@@ -927,7 +923,7 @@ export default function EquipmentManager({
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">CHI PHÍ XĂNG / DẦU THÁNG</p>
           <h2 className="text-xl font-black font-mono text-slate-800 mt-1">{stats.totalFuelCost.toLocaleString('vi-VN')} ₫</h2>
-          <p className="text-[10px] text-slate-400 mt-1">Hạch toán thực tế theo ca dã chiến</p>
+          <p className="text-[10px] text-slate-400 mt-1">Hạch toán thực tế theo ca </p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">TỔNG PHÍ BẢO TRÌ/BẢO DƯỠNG</p>
@@ -980,7 +976,7 @@ export default function EquipmentManager({
                 ))}
               </select>
             </div>
-            
+
             <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
               <span className="whitespace-nowrap">Loại:</span>
               <select
@@ -990,7 +986,7 @@ export default function EquipmentManager({
               >
                 <option value="all">Tất cả</option>
                 <option value="Heavy">Xe cơ giới nặng (Komatsu/Hamm...)</option>
-                <option value="Tool">Công cụ/Dụng cụ dã chiến</option>
+                <option value="Tool">Công cụ/Dụng cụ </option>
               </select>
             </div>
           </div>
@@ -1000,7 +996,7 @@ export default function EquipmentManager({
       {/* Main Content Areas */}
       {activeTab === 'directory' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Left list directory */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1024,7 +1020,7 @@ export default function EquipmentManager({
                   if (eq.status === 'Maintenance') statusBadge = 'bg-amber-50 text-amber-700 border border-amber-200';
 
                   return (
-                    <div 
+                    <div
                       key={eq.id}
                       onClick={() => setSelectedEquipId(eq.id)}
                       className={`p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors ${
@@ -1041,11 +1037,11 @@ export default function EquipmentManager({
                             ({isTool ? 'Dụng cụ' : 'Xe cơ giới'})
                           </span>
                         </div>
-                        
+
                         <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-[11px] text-slate-500">
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {proj ? proj.name : 'Kho tổng dã chiến'}
+                            {proj ? proj.name : 'Kho tổng '}
                           </span>
                           <span className="text-slate-300">|</span>
                           <span className="flex items-center gap-1 font-mono">
@@ -1059,7 +1055,7 @@ export default function EquipmentManager({
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${statusBadge}`}>
                           {eq.status === 'Available' ? 'Sẵn sàng' : (eq.status === 'In-Use' ? 'Đang thi công' : 'Bảo dưỡng')}
                         </span>
-                        
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1083,7 +1079,7 @@ export default function EquipmentManager({
           <div className="space-y-4">
             {selectedEquipmentDetail ? (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 text-xs font-semibold">
-                
+
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                   <div className="w-10 h-10 rounded bg-blue-100 flex items-center justify-center text-blue-600">
                     <Activity className="w-5 h-5" />
@@ -1099,7 +1095,7 @@ export default function EquipmentManager({
                   <div>
                     <p className="text-slate-400 uppercase font-bold text-[9px] tracking-wider mb-1">MŨI THI CÔNG HIỆN TẠI</p>
                     <p className="text-slate-800 font-bold">
-                      {projects.find(p => p.id === selectedEquipmentDetail.currentProjectId)?.name || 'Kho dã chiến'}
+                      {projects.find(p => p.id === selectedEquipmentDetail.currentProjectId)?.name || 'Kho '}
                     </p>
                   </div>
                   <div>
@@ -1121,14 +1117,14 @@ export default function EquipmentManager({
 
                 {/* Sub Forms inside details */}
                 <div className="space-y-4">
-                  
+
                   {/* Form Log Fuel */}
                   <form onSubmit={handleLogFuel} className="bg-slate-50 border border-slate-150 p-3.5 rounded-lg space-y-3">
                     <div className="flex items-center gap-1 text-slate-700 font-black text-[10px] uppercase tracking-wider">
                       <Gauge className="w-3.5 h-3.5 text-blue-600" />
                       Ghi nhận tiêu hao nhiên liệu & chi phí
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                       <div>
                         <label className="text-slate-400 block mb-0.5">Số lượng (Lít / Kw)</label>
@@ -1228,13 +1224,13 @@ export default function EquipmentManager({
 
       {activeTab === 'logs' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          
+
           {/* Fuel Consumption Logs */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[500px]">
             <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Gauge className="w-4 h-4 text-blue-400" />
-                <h3 className="text-xs font-black uppercase tracking-wider">Cấp nhiên liệu dã chiến</h3>
+                <h3 className="text-xs font-black uppercase tracking-wider">Cấp nhiên liệu </h3>
               </div>
               <span className="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono font-bold">Phiếu Số 02-VT</span>
             </div>
@@ -1337,7 +1333,7 @@ export default function EquipmentManager({
             <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Truck className="w-4 h-4 text-blue-400" />
-                <h3 className="text-xs font-black uppercase tracking-wider">Nhật ký điều động dã chiến</h3>
+                <h3 className="text-xs font-black uppercase tracking-wider">Nhật ký điều động </h3>
               </div>
               <span className="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono font-bold">LĐĐ-BĐH</span>
             </div>
@@ -1391,7 +1387,7 @@ export default function EquipmentManager({
 
       {activeTab === 'procurement' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-2xl mx-auto space-y-6 text-xs font-semibold">
-          
+
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-slate-800 font-black text-sm flex items-center gap-2">
               <Plus className="w-5 h-5 text-blue-600" />
@@ -1403,7 +1399,7 @@ export default function EquipmentManager({
           </div>
 
           <form onSubmit={handleProcure} className="space-y-4">
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-slate-400 block mb-1">Phương thức sở hữu *</label>
@@ -1424,7 +1420,7 @@ export default function EquipmentManager({
                       procureType === 'Rental' ? 'bg-slate-900 text-white border-slate-950' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    Thuê ngoài dã chiến (TK 627)
+                    Thuê ngoài (TK 627)
                   </button>
                 </div>
               </div>
@@ -1471,7 +1467,7 @@ export default function EquipmentManager({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Máy hàn dã chiến Jasic ZX7-250, Xe nâng cẩu..."
+                  placeholder="Ví dụ: Máy hàn Jasic ZX7-250, xe nâng cẩu..."
                   value={procureName}
                   onChange={(e) => setProcureName(e.target.value)}
                   className="w-full p-2.5 border border-slate-200 rounded-lg font-bold"
@@ -1528,7 +1524,7 @@ export default function EquipmentManager({
                   className="w-full p-2.5 border border-slate-200 bg-slate-50 rounded-lg"
                 >
                   <option value="Bank">Chuyển khoản Ngân hàng (TK 1121)</option>
-                  <option value="Cash">Tiền mặt tại quỹ dã chiến (TK 1111)</option>
+                  <option value="Cash">Tiền mặt tại quỹ (TK 1111)</option>
                   <option value="Debt">Mua chịu ghi nhận công nợ (TK 331)</option>
                 </select>
               </div>
@@ -1559,13 +1555,13 @@ export default function EquipmentManager({
       {showDispatchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
-            
+
             <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-wider flex items-center gap-2">
                 <Truck className="w-4 h-4 text-blue-400" />
-                Lập lệnh điều động thiết bị cơ giới dã chiến
+                Lập lệnh điều động thiết bị cơ giới
               </h3>
-              <button 
+              <button
                 onClick={() => setShowDispatchModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
@@ -1574,7 +1570,7 @@ export default function EquipmentManager({
             </div>
 
             <form onSubmit={handleDispatch} className="p-6 space-y-4 text-xs font-semibold">
-              
+
               <div>
                 <p className="text-[11px] text-slate-500 mb-3 bg-slate-50 p-2.5 rounded border border-slate-150 leading-relaxed">
                   Thiết bị được điều phối sẽ tự động cập nhật Vị trí dự án hiện hành, đồng thời ghi nhận một chi phí vận chuyển xe fooc nâng máy xúc vào nhật ký công trình tiếp nhận.

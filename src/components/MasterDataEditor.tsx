@@ -62,7 +62,6 @@ export default function MasterDataEditor(props: Props) {
   };
 
   return <div className="space-y-4">
-    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900"><b>Quy tắc mã thống nhất:</b> mã người dùng nhập chính là ID nội bộ. Khi đổi mã, hệ thống tự cập nhật toàn bộ dữ liệu đang tham chiếu đến ID cũ.</div>
     {message && <div className="fixed bottom-5 right-5 z-50 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow-xl">{message}</div>}
     <div className="flex flex-wrap gap-2">{tabs.map(([id, label]) => <button key={id} onClick={() => setTab(id)} className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === id ? 'bg-blue-600 text-white' : 'border bg-white'}`}>{label}</button>)}</div>
     <div className="overflow-hidden rounded-2xl border bg-white">

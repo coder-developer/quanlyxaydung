@@ -59,7 +59,7 @@ export default function OpsSimulator({
     // Project Center coordinates +/- small offset vs random coffee shop
     const lat = gpsSetting === 'valid' ? 10.7412 + (Math.random() - 0.5) * 0.0002 : 10.7985;
     const lng = gpsSetting === 'valid' ? 106.6345 + (Math.random() - 0.5) * 0.0002 : 106.6912;
-    
+
     const isLate = new Date().getHours() >= 8;
 
     const newTimesheet: Timesheet = {
@@ -77,7 +77,7 @@ export default function OpsSimulator({
     };
 
     onCheckIn(newTimesheet);
-    
+
     if (gpsSetting === 'valid' && faceCheck) {
       setCheckInLog(`✅ [CHẤM CÔNG THÀNH CÔNG] Công nhân ${currentEmp.name} đã check-in thành công tại dự án "${assignedProj.name}". Tọa độ hợp lệ, khớp khuôn mặt 98%!`);
     } else if (gpsSetting === 'invalid') {
@@ -99,12 +99,12 @@ export default function OpsSimulator({
     }
 
     onDispatchMachine(selectedEqId, targetProjId);
-    setDispatchLog(`🚛 [ĐIỀU ĐỘNG THÀNH CÔNG] Đã luân chuyển máy "${machine.name}" sang dự án "${targetProj.name}". Hệ thống tự động cập nhật nhật ký thiết bị và phân bổ định mức xăng dầu dã chiến.`);
+    setDispatchLog(`🚛 [ĐIỀU ĐỘNG THÀNH CÔNG] Đã luân chuyển máy "${machine.name}" sang dự án "${targetProj.name}". Hệ thống tự động cập nhật nhật ký thiết bị và phân bổ định mức xăng dầu .`);
   };
 
   return (
     <div className="space-y-6" id="ops-simulator-root">
-      
+
       {/* Simulation Control Header */}
       <div className="bg-emerald-950 text-white rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -130,7 +130,7 @@ export default function OpsSimulator({
         <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4 shadow-3xs">
           <div className="flex items-center gap-2 text-emerald-700">
             <MapPin className="w-5 h-5 shrink-0" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">1. Mô phỏng Chấm công GPS di động dã chiến</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">1. Mô phỏng Chấm công GPS di động </h3>
           </div>
           <p className="text-xs text-gray-500 leading-normal">
             Công nhân tại 5 công trường khác nhau sử dụng app điện thoại quét mã QR dán tại lán trại. Hệ thống so khớp GPS và AI camera.
@@ -211,8 +211,8 @@ export default function OpsSimulator({
           {/* Action Log Result */}
           {checkInLog && (
             <div className={`p-3.5 rounded-lg border text-xs leading-relaxed font-mono ${
-              checkInLog.includes('thành công') 
-                ? 'bg-emerald-50 border-emerald-100 text-emerald-900' 
+              checkInLog.includes('thành công')
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-900'
                 : 'bg-rose-50 border-rose-100 text-rose-900'
             }`}>
               {checkInLog}
@@ -297,12 +297,12 @@ export default function OpsSimulator({
           {approvals.map((req) => {
             const requester = employees.find(e => e.id === req.requesterId);
             const proj = projects.find(p => p.id === req.projectId);
-            
+
             const isCompleted = req.status === 'Approved' || req.status === 'Rejected';
 
             return (
               <div key={req.id} className="border border-gray-200 rounded-xl p-4 flex flex-col justify-between bg-gray-50/30 hover:border-gray-300 transition shadow-3xs">
-                
+
                 {/* Request details */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -311,14 +311,14 @@ export default function OpsSimulator({
                       req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
                       req.status === 'Rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800 animate-pulse'
                     }`}>
-                      {req.status === 'Approved' ? 'Đã duyệt xong' : 
-                       req.status === 'Rejected' ? 'Từ chối' : 
+                      {req.status === 'Approved' ? 'Đã duyệt xong' :
+                       req.status === 'Rejected' ? 'Từ chối' :
                        req.status === 'Pending_Accountant' ? 'Kế toán chờ duyệt' : 'Giám đốc chờ duyệt'}
                     </span>
                   </div>
 
                   <h4 className="text-xs font-bold text-gray-900 leading-snug">{req.title}</h4>
-                  
+
                   <div className="text-[10px] text-gray-500 space-y-1">
                     <div>Đề xuất: <span className="font-semibold text-gray-800">{requester?.name}</span> ({requester?.role})</div>
                     <div>Giá trị: <span className="font-bold text-indigo-950 font-mono">{req.amount.toLocaleString()} ₫</span></div>

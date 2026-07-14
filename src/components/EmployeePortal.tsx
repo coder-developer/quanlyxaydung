@@ -83,7 +83,7 @@ export default function EmployeePortal({ employeeId, employees, projects, timesh
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="bg-slate-950 text-white px-4 py-4 shadow-lg">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-          <div><div className="text-xs font-bold text-cyan-400 uppercase">{companyConfig.appTitle || 'CONSTRUCT-OS'} • Cổng nhân viên</div><h1 className="font-black text-lg">{employee.name}</h1></div>
+          <div><div className="text-xs font-bold text-cyan-400 uppercase">{companyConfig.appTitle || 'Quản Trị Doanh Nghiệp'} • Cổng nhân viên</div><h1 className="font-black text-lg">{employee.name}</h1></div>
           <div className="flex items-center gap-3"><div className="bg-white rounded-lg px-2 py-1"><ChangePinButton onChanged={onLogout}/></div><button onClick={onLogout} className="flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold hover:bg-slate-700"><LogOut className="w-4 h-4" />Đăng xuất</button></div>
         </div>
       </header>

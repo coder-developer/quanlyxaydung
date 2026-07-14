@@ -6,21 +6,21 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Contractor, Contract, FinancialTransaction, CompanyConfig, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
-import { 
-  FileSpreadsheet, 
-  Plus, 
-  Search, 
-  Building2, 
-  Handshake, 
-  TrendingUp, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Coins, 
-  FileText, 
-  Check, 
-  AlertCircle, 
-  Filter, 
-  DollarSign, 
+import {
+  FileSpreadsheet,
+  Plus,
+  Search,
+  Building2,
+  Handshake,
+  TrendingUp,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Coins,
+  FileText,
+  Check,
+  AlertCircle,
+  Filter,
+  DollarSign,
   Calendar,
   Layers,
   ChevronRight,
@@ -160,7 +160,7 @@ export default function LiabilitiesManager({
       id: 'PT-001',
       type: 'Receipt',
       templateType: 'Thông tư 200/2014/TT-BTC',
-      unitName: 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP',
+      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
       unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
       bookNo: 'Q-01',
       voucherNo: 'PT-001',
@@ -183,7 +183,7 @@ export default function LiabilitiesManager({
       id: 'PC-001',
       type: 'Payment',
       templateType: 'Thông tư 99/2025/TT-BTC',
-      unitName: 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP',
+      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
       unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
       bookNo: 'Q-01',
       voucherNo: 'PC-001',
@@ -206,7 +206,7 @@ export default function LiabilitiesManager({
       id: 'PT-002',
       type: 'Receipt',
       templateType: 'Thông tư 200/2014/TT-BTC',
-      unitName: 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP',
+      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
       unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
       bookNo: 'Q-01',
       voucherNo: 'PT-002',
@@ -233,7 +233,7 @@ export default function LiabilitiesManager({
   // Form states for creating voucher
   const [newVoucherType, setNewVoucherType] = useState<'Receipt' | 'Payment'>('Receipt');
   const [newVoucherTemplate, setNewVoucherTemplate] = useState<string>('Thông tư 200/2014/TT-BTC');
-  const [newVoucherUnitName, setNewVoucherUnitName] = useState<string>(companyConfig?.companyName || 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP');
+  const [newVoucherUnitName, setNewVoucherUnitName] = useState<string>(companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT');
   const [newVoucherUnitAddress, setNewVoucherUnitAddress] = useState<string>(companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh');
 
   useEffect(() => {
@@ -411,7 +411,7 @@ export default function LiabilitiesManager({
       const title = c.title.toLowerCase();
       const num = c.contractNumber.toLowerCase();
       const matchesSearch = partnerName.includes(searchQuery.toLowerCase()) || title.includes(searchQuery.toLowerCase()) || num.includes(searchQuery.toLowerCase());
-      
+
       const matchesProject = projectFilter === 'all' || c.projectId === projectFilter;
       const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
 
@@ -449,7 +449,7 @@ export default function LiabilitiesManager({
     if (type === 'clients') {
       filename = `Bao_cao_Cong_no_Chu_dau_tu_${Date.now()}.xls`;
       sheetTitle = 'BÁO CÁO TỔNG HỢP CÔNG NỢ CHỦ ĐẦU TƯ';
-      
+
       tableHeadersHtml = `
         <tr>
           <th style="width: 50px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">STT</th>
@@ -521,7 +521,7 @@ export default function LiabilitiesManager({
     } else if (type === 'subcontractors') {
       filename = `Bao_cao_Cong_no_Nha_thau_phu_${Date.now()}.xls`;
       sheetTitle = 'BÁO CÁO TỔNG HỢP CÔNG NỢ NHÀ THẦU PHỤ & CUNG ỨNG';
-      
+
       tableHeadersHtml = `
         <tr>
           <th style="width: 50px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">STT</th>
@@ -597,7 +597,7 @@ export default function LiabilitiesManager({
     } else {
       filename = `Danh_sach_Doi_tac_Chung_${Date.now()}.xls`;
       sheetTitle = 'DANH SÁCH ĐỐI TÁC KHÁCH HÀNG & DOANH NGHIỆP LIÊN KẾT';
-      
+
       tableHeadersHtml = `
         <tr>
           <th style="width: 50px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">STT</th>
@@ -689,7 +689,7 @@ export default function LiabilitiesManager({
         <table class="header-table" style="width: 100%; border: none; margin-bottom: 20px;">
           <tr>
             <td style="width: 50%; font-family: 'Times New Roman';">
-              <span class="company-title"><strong>${companyConfig?.companyName || 'TẬP ĐOÀN ĐẦU TƯ XÂY DỰNG CONSTRUCT-OS'}</strong></span><br>
+              <span class="company-title"><strong>${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</strong></span><br>
               <span style="font-size: 8.5pt; font-weight: normal; color: #64748b;">${companyConfig?.siteOffice || 'Hệ thống Quản lý Live Operations & Financial P&L'}</span>
             </td>
             <td style="text-align: right; width: 50%; font-style: italic; font-family: 'Times New Roman'; font-size: 10pt;">
@@ -830,7 +830,7 @@ export default function LiabilitiesManager({
     const d = new Date(v.date);
     const exportCompanyName = (companyConfig?.companyName || v.unitName).trim();
     const exportCompanyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
-    
+
     const htmlContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
@@ -866,9 +866,9 @@ export default function LiabilitiesManager({
               ${v.type === 'Receipt' ? '(Ban hành theo Thông tư số 200/2014/TT-BTC<br>Ngày 22/12/2014 của Bộ Tài chính)' : '(Kèm theo Thông tư số 99/2025/TT-BTC<br>ngày 27 tháng 10 năm 2025 của Bộ trưởng Bộ Tài chính)'}
             </td>
           </tr>
-          
+
           <tr><td colspan="6" style="height: 15px;"></td></tr>
-          
+
           <tr>
             <td colspan="4" style="font-size: 16pt; font-weight: bold; text-align: center; text-transform: uppercase;">
               ${v.type === 'Receipt' ? 'PHIẾU THU' : 'PHIẾU CHI'}
@@ -889,9 +889,9 @@ export default function LiabilitiesManager({
             <td colspan="4"></td>
             <td colspan="2" style="font-size: 10pt;">Có: ${v.creditAccount}</td>
           </tr>
-          
+
           <tr><td colspan="6" style="height: 15px;"></td></tr>
-          
+
           <tr>
             <td colspan="6" style="font-size: 11pt; padding: 4px 0;">
               <strong>Họ và tên người ${v.type === 'Receipt' ? 'nộp' : 'nhận'} tiền:</strong> ${v.personName}
@@ -917,18 +917,18 @@ export default function LiabilitiesManager({
               <strong>Kèm theo:</strong> ${v.attachmentsCount} Chứng từ gốc &nbsp;&nbsp;&nbsp;&nbsp; <strong>Chứng từ gốc:</strong> ${v.attachmentsDetail}
             </td>
           </tr>
-          
+
           <tr><td colspan="6" style="height: 15px;"></td></tr>
-          
+
           <tr>
             <td colspan="3"></td>
             <td colspan="3" style="text-align: center; font-style: italic; font-size: 10.5pt;">
               Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}
             </td>
           </tr>
-          
+
           <tr><td colspan="6" style="height: 10px;"></td></tr>
-          
+
           <tr>
             <td style="width: 20%; font-weight: bold; text-align: center; font-size: 10.5pt; vertical-align: top;">Giám đốc</td>
             <td style="width: 20%; font-weight: bold; text-align: center; font-size: 10.5pt; vertical-align: top;">Kế toán trưởng</td>
@@ -957,9 +957,9 @@ export default function LiabilitiesManager({
             <td style="text-align: center; font-size: 10.5pt;">${companyConfig?.treasurerName || 'Nguyễn Văn Hải'}</td>
             <td style="text-align: center; font-size: 10.5pt;">${v.type === 'Receipt' ? (companyConfig?.treasurerName || 'Trần Quốc Bảo') : v.personName}</td>
           </tr>
-          
+
           <tr><td colspan="6" style="height: 20px;"></td></tr>
-          
+
           <tr>
             <td colspan="6" style="font-size: 11pt; padding: 4px 0;">
               <strong>Đã nhận đủ số tiền (viết bằng chữ):</strong> ${v.receivedWords || v.amountWords}
@@ -1313,7 +1313,7 @@ export default function LiabilitiesManager({
 
       // If it's subcontractor expense, update project spent
       if (!isClient) {
-        setProjects(prevProjs => 
+        setProjects(prevProjs =>
           prevProjs.map(proj => {
             if (proj.id === newContractProjectId) {
               return { ...proj, spent: proj.spent + newContractAdvance };
@@ -1325,7 +1325,7 @@ export default function LiabilitiesManager({
     }
 
     showToast(`Đã ký thành công hợp đồng ${newContractNo}!`);
-    
+
     // Reset Form
     setNewContractNo('');
     setNewContractTitle('');
@@ -1377,7 +1377,7 @@ export default function LiabilitiesManager({
 
     // 3. Update Project Spent if paying subcontractor
     if (!isClient) {
-      setProjects(prevProjs => 
+      setProjects(prevProjs =>
         prevProjs.map(proj => {
           if (proj.id === targetContract.projectId) {
             return {
@@ -1391,7 +1391,7 @@ export default function LiabilitiesManager({
     }
 
     showToast(`Đã ghi nhận bút toán ${isClient ? 'Thực thu' : 'Thực trả'}: +${formatVND(paymentAmount)}`);
-    
+
     // Reset form
     setSelectedContractId('');
     setPaymentAmount(0);
@@ -1432,7 +1432,7 @@ export default function LiabilitiesManager({
 
   return (
     <div className="space-y-6" id="liabilities-manager-root">
-      
+
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-slate-900 border border-emerald-500 text-white px-5 py-3 rounded-lg shadow-xl animate-bounce">
@@ -1443,7 +1443,7 @@ export default function LiabilitiesManager({
 
       {/* Main Liabilities Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
+
         {/* Receivables summary from clients */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1542,7 +1542,7 @@ export default function LiabilitiesManager({
 
       {/* Control Actions & Toolbar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        
+
         {/* Navigation for Sub-Tabs */}
         <div className="flex bg-slate-100 p-1 rounded-lg self-start">
           <button
@@ -1585,7 +1585,7 @@ export default function LiabilitiesManager({
 
         {/* Quick Operations Button Grid */}
         <div className="flex flex-wrap items-center gap-2">
-          
+
           {/* Export Excel Button */}
           <button
             onClick={() => handleExportExcel(subTab)}
@@ -1905,8 +1905,8 @@ export default function LiabilitiesManager({
             {/* List */}
             <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
               {vouchersList
-                .filter(v => 
-                  v.voucherNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                .filter(v =>
+                  v.voucherNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   v.personName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   v.reason.toLowerCase().includes(searchQuery.toLowerCase())
                 )
@@ -1918,8 +1918,8 @@ export default function LiabilitiesManager({
                       key={v.id}
                       onClick={() => setSelectedVoucher(v)}
                       className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                        isSelected 
-                          ? 'bg-blue-50/50 border-blue-400 shadow-2xs' 
+                        isSelected
+                          ? 'bg-blue-50/50 border-blue-400 shadow-2xs'
                           : 'bg-white border-slate-200 hover:bg-slate-50/60'
                       }`}
                     >
@@ -2010,7 +2010,7 @@ export default function LiabilitiesManager({
 
                 {/* Physical Paper layout */}
                 <div className="bg-yellow-50/5 border border-amber-200/25 p-1 rounded-xl shadow-inner bg-slate-50 flex justify-center">
-                  <div 
+                  <div
                     id={`printable-paper-voucher-${selectedVoucher.id}`}
                     className="bg-white shadow-lg border border-slate-200 p-8 md:p-10 text-black max-w-[700px] w-full min-h-[850px] flex flex-col justify-between select-text"
                     style={{ fontFamily: "'Times New Roman', Times, serif" }}
@@ -2019,8 +2019,8 @@ export default function LiabilitiesManager({
                     <div className="flex justify-between items-start text-xs border-b border-dashed border-slate-100 pb-4">
                       <div className="w-[55%] space-y-1.5">
                         <div className="font-extrabold uppercase leading-tight text-[11px]">
-                          Đơn vị: <span 
-                            contentEditable 
+                          Đơn vị: <span
+                            contentEditable
                             suppressContentEditableWarning
                             onBlur={(e) => {
                               const val = e.target.innerText;
@@ -2032,8 +2032,8 @@ export default function LiabilitiesManager({
                           </span>
                         </div>
                         <div className="text-[10px] leading-relaxed text-slate-700">
-                          Địa chỉ: <span 
-                            contentEditable 
+                          Địa chỉ: <span
+                            contentEditable
                             suppressContentEditableWarning
                             onBlur={(e) => {
                               const val = e.target.innerText;
@@ -2073,8 +2073,8 @@ export default function LiabilitiesManager({
                     {/* Code / Accounts details */}
                     <div className="flex justify-end text-xs font-semibold mb-6 pr-4">
                       <div className="space-y-1 min-w-[150px]">
-                        <div>Quyển số: <span 
-                          contentEditable 
+                        <div>Quyển số: <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2082,9 +2082,9 @@ export default function LiabilitiesManager({
                           }}
                           className="font-bold border-b border-slate-300 px-1 focus:outline-none hover:bg-amber-50"
                         >{selectedVoucher.bookNo}</span></div>
-                        
-                        <div>Số phiếu: <span 
-                          contentEditable 
+
+                        <div>Số phiếu: <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2092,9 +2092,9 @@ export default function LiabilitiesManager({
                           }}
                           className="font-bold text-red-600 border-b border-slate-300 px-1 focus:outline-none hover:bg-amber-50"
                         >{selectedVoucher.voucherNo}</span></div>
-                        
-                        <div>Nợ TK: <span 
-                          contentEditable 
+
+                        <div>Nợ TK: <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2102,9 +2102,9 @@ export default function LiabilitiesManager({
                           }}
                           className="font-mono border-b border-slate-300 px-1 focus:outline-none hover:bg-amber-50"
                         >{selectedVoucher.debitAccount}</span></div>
-                        
-                        <div>Có TK: <span 
-                          contentEditable 
+
+                        <div>Có TK: <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2119,8 +2119,8 @@ export default function LiabilitiesManager({
                     <div className="space-y-4 text-[12.5px] leading-relaxed flex-1">
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">Họ và tên người {selectedVoucher.type === 'Receipt' ? 'nộp' : 'nhận'} tiền:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2132,8 +2132,8 @@ export default function LiabilitiesManager({
 
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">Địa chỉ:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2145,8 +2145,8 @@ export default function LiabilitiesManager({
 
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">Lý do {selectedVoucher.type === 'Receipt' ? 'nộp' : 'chi'}:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2162,8 +2162,8 @@ export default function LiabilitiesManager({
                           {selectedVoucher.amount.toLocaleString('vi-VN')} ₫
                         </span>
                         <span className="font-bold ml-4 shrink-0">(Viết bằng chữ):</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2175,8 +2175,8 @@ export default function LiabilitiesManager({
 
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">Kèm theo:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2185,8 +2185,8 @@ export default function LiabilitiesManager({
                           className="w-16 mx-2 border-b border-dotted border-slate-400 text-center font-bold focus:outline-none hover:bg-amber-50"
                         >{selectedVoucher.attachmentsCount}</span>
                         <span className="font-bold shrink-0">Chứng từ gốc:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2245,8 +2245,8 @@ export default function LiabilitiesManager({
                     <div className="mt-8 pt-4 border-t border-dashed border-slate-200 space-y-2 text-[11px] text-slate-800">
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">Đã nhận đủ số tiền (viết bằng chữ):</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2258,8 +2258,8 @@ export default function LiabilitiesManager({
 
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">+ Tỷ giá ngoại tệ (vàng bạc, đá quý):</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2271,8 +2271,8 @@ export default function LiabilitiesManager({
 
                       <div className="flex items-baseline">
                         <span className="font-bold shrink-0">+ Số tiền quy đổi:</span>
-                        <span 
-                          contentEditable 
+                        <span
+                          contentEditable
                           suppressContentEditableWarning
                           onBlur={(e) => {
                             const val = e.target.innerText;
@@ -2314,7 +2314,7 @@ export default function LiabilitiesManager({
                 <Plus className="w-4 h-4 text-emerald-400" />
                 Thêm đối tác doanh nghiệp mới
               </h3>
-              <button 
+              <button
                 onClick={() => setShowAddPartnerModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
@@ -2423,7 +2423,7 @@ export default function LiabilitiesManager({
                 <FileText className="w-4 h-4 text-amber-400" />
                 Đăng ký ký kết hợp đồng thi công mới
               </h3>
-              <button 
+              <button
                 onClick={() => setShowAddContractModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
@@ -2561,7 +2561,7 @@ export default function LiabilitiesManager({
                 <Coins className="w-4 h-4 text-emerald-400 animate-spin" />
                 Ghi nhận bút toán dòng tiền & thanh toán nợ
               </h3>
-              <button 
+              <button
                 onClick={() => setShowRecordPaymentModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
@@ -2569,7 +2569,7 @@ export default function LiabilitiesManager({
               </button>
             </div>
             <form onSubmit={handleRecordPayment} className="p-5 space-y-4 text-xs font-semibold">
-              
+
               <div>
                 <label className="text-slate-400 block mb-1">Loại Nghiệp Vụ Dòng Tiền *</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -2678,7 +2678,7 @@ export default function LiabilitiesManager({
                 <Layers className="w-4 h-4 text-indigo-400" />
                 Ghi nhận khối lượng nghiệm thu thực tế (A-B)
               </h3>
-              <button 
+              <button
                 onClick={() => setShowRecordVolumeModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
@@ -2686,7 +2686,7 @@ export default function LiabilitiesManager({
               </button>
             </div>
             <form onSubmit={handleRecordAcceptance} className="p-5 space-y-4 text-xs font-semibold">
-              
+
               <div>
                 <label className="text-slate-400 block mb-1">Chọn Hợp Đồng cần Nghiệm thu *</label>
                 <select
@@ -2756,16 +2756,16 @@ export default function LiabilitiesManager({
                 <FileText className="w-4 h-4 text-blue-400" />
                 Lập chứng từ hạch toán kế toán mới (Thông tư BTC)
               </h3>
-              <button 
+              <button
                 onClick={() => setShowCreateVoucherModal(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm"
               >
                 ✕
               </button>
             </div>
-            
+
             <form onSubmit={handleSaveNewVoucher} className="p-6 space-y-4 text-xs font-semibold">
-              
+
               {/* Type and Template selection */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -2791,7 +2791,7 @@ export default function LiabilitiesManager({
                     <option value="Payment">Phiếu Chi (Mẫu 02-TT)</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="text-slate-400 block mb-1">Số Phiếu *</label>
                   <input
