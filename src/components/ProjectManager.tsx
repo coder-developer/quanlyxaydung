@@ -139,7 +139,7 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
       </div>
     </section>
 
-    {showForm && <ProjectFormPanel form={form} editing={Boolean(editingId)} error={error} onUpdate={update} onSave={save} onClose={closeForm}/>} 
+    {showForm && <ProjectFormPanel form={form} editing={Boolean(editingId)} error={error} onUpdate={update} onSave={save} onClose={closeForm}/>}
 
     <div className="grid gap-4 xl:grid-cols-2">
       {filtered.map(project => <article key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
