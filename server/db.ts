@@ -82,6 +82,13 @@ export async function migrate() {
       read_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS realtime_events (
+      id BIGSERIAL PRIMARY KEY,
+      channel TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS realtime_events_created_at_idx ON realtime_events(created_at);
     CREATE TABLE IF NOT EXISTS payslip_views (
       period TEXT NOT NULL,
       employee_id TEXT NOT NULL,

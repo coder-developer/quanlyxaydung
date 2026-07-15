@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { CalendarDays, CheckCircle2, Clock, LogOut, MapPin, Wallet } from 'lucide-react';
 import type { CompanyConfig, Employee, LaborContract, Project, Timesheet } from '../types';
 import { apiFetch } from '../lib/api';
+import { subscribeRealtime } from '../lib/realtime';
 import ChangePinButton from './ChangePinButton';
 
 interface Props {
@@ -40,8 +41,13 @@ export default function EmployeePortal({ employeeId, employees, projects, timesh
   const allowance = contract?.allowance || 0;
   const estimatedSalary = isDaily ? base * presentDays + allowance : base / 26 * presentDays + allowance;
   const project = projects.find(item => item.id === employee?.projectId);
-  const loadWorkforce = () => Promise.all([apiFetch('/api/workforce/requests'),apiFetch('/api/workforce/shifts'),apiFetch('/api/notifications')]).then(([r,s,n])=>{setRequests(r);setShifts(s);setNotifications(n)}).catch(()=>{});
-  useEffect(() => { loadWorkforce(); }, []);
+  const loadWorkforce = useCallback(() => Promise.all([apiFetch('/api/workforce/requests'),apiFetch('/api/workforce/shifts'),apiFetch('/api/notifications')]).then(([r,s,n])=>{setRequests(r);setShifts(s);setNotifications(n)}).catch(()=>{}), []);
+  useEffect(() => {
+    loadWorkforce();
+    const unsubscribe = subscribeRealtime(['notifications', 'workforce_requests', 'shifts'], loadWorkforce);
+    const fallback = window.setInterval(loadWorkforce, 30_000);
+    return () => { unsubscribe(); window.clearInterval(fallback); };
+  }, [loadWorkforce]);
   const distanceMeters = (lat1:number,lon1:number,lat2:number,lon2:number) => { const r=6371000; const dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180; const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return 2*r*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); };
 
   const markAttendance = () => {

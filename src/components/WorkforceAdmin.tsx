@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { apiFetch } from '../lib/api';
+import { subscribeRealtime } from '../lib/realtime';
 import type { Employee, Project, Timesheet, UserRole } from '../types';
 
 interface Props { role: UserRole; employees: Employee[]; projects: Project[]; timesheets: Timesheet[]; setProjects: Dispatch<SetStateAction<Project[]>> }
@@ -13,12 +14,17 @@ export default function WorkforceAdmin({ role, employees, projects, timesheets, 
   const [userRoleFilter, setUserRoleFilter] = useState('SiteAccountant');
   const [userProjectFilter, setUserProjectFilter] = useState('all');
   const [shift, setShift] = useState({ employeeId: employees[0]?.id || '', projectId: projects[0]?.id || '', shiftDate: today.toISOString().slice(0,10), startTime: '07:30', endTime: '17:00', shiftName: 'Ca ngày' });
-  const load = async () => {
+  const load = useCallback(async () => {
     const [requestRows, shiftRows, periodRows] = await Promise.all([apiFetch('/api/workforce/requests'), apiFetch('/api/workforce/shifts'), apiFetch('/api/workforce/payroll-periods')]);
     setRequests(requestRows); setShifts(shiftRows); setPeriods(periodRows);
     if (role === 'CEO') setUsers(await apiFetch('/api/admin/users'));
-  };
-  useEffect(() => { load().catch(error => setMessage(error.message)); }, []);
+  }, [role]);
+  useEffect(() => {
+    load().catch(error => setMessage(error.message));
+    const unsubscribe = subscribeRealtime(['accounts', 'workforce_requests', 'shifts', 'payroll_periods'], () => load().catch(() => {}));
+    const fallback = window.setInterval(() => load().catch(() => {}), 30_000);
+    return () => { unsubscribe(); window.clearInterval(fallback); };
+  }, [load]);
   const monthRows = timesheets.filter(row => row.date.startsWith(currentPeriod));
   const stats = useMemo(() => ({ present: monthRows.filter(r => r.status === 'Present').length, late: monthRows.filter(r => r.status === 'Late').length, overtime: monthRows.filter(r => r.status === 'Overtime').length, absent: monthRows.filter(r => r.status === 'Absent').length, laborCost: employees.reduce((sum,e) => sum + (e.type === 'Seasonal' ? e.baseSalary * monthRows.filter(r => r.employeeId === e.id && r.status !== 'Absent').length : e.baseSalary), 0) }), [monthRows, employees]);
   const createAccount = async () => { const emp=employees.find(e=>e.id===account.employeeId); await apiFetch('/api/admin/users',{method:'POST',body:JSON.stringify({username:account.username,pin:account.pin,employeeId:emp?.id,fullName:emp?.name,role:'Employee'})}); setMessage('Đã tạo tài khoản nhân viên.'); await load(); };

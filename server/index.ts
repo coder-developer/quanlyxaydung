@@ -1,11 +1,13 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import type { PoolClient } from 'pg';
 import { migrate, pool } from './db.js';
 
 const app = express();
@@ -33,6 +35,54 @@ const DEFAULT_COMPANY_CONFIG = {
 const emptyStatePayload = () => ({
   companyConfig: { ...DEFAULT_COMPANY_CONFIG }, projects: [], employees: [], contractors: [], contracts: [], inventoryItems: [], materialLimits: [], inventoryLedger: [], timesheets: [], equipment: [], approvals: [], transactions: [], laborContracts: [], constructionTasks: [],
 });
+
+const realtimeSignal = new EventEmitter();
+realtimeSignal.setMaxListeners(0);
+let realtimeListener: PoolClient | null = null;
+let realtimeListenerStarting: Promise<void> | null = null;
+
+function ensureRealtimeListener() {
+  if (realtimeListener) return Promise.resolve();
+  if (realtimeListenerStarting) return realtimeListenerStarting;
+  realtimeListenerStarting = (async () => {
+    const client = await pool.connect();
+    try {
+      await client.query('LISTEN erp_realtime');
+      realtimeListener = client;
+      client.on('notification', notification => {
+        if (notification.channel === 'erp_realtime') realtimeSignal.emit('change');
+      });
+      const reset = () => {
+        if (realtimeListener !== client) return;
+        realtimeListener = null;
+        try { client.release(true); } catch { /* connection is already closed */ }
+      };
+      client.once('error', reset);
+      client.once('end', reset);
+    } catch (error) {
+      client.release(true);
+      throw error;
+    }
+  })().finally(() => { realtimeListenerStarting = null; });
+  return realtimeListenerStarting;
+}
+
+async function publishRealtimeEvent(channel: string, eventType: string) {
+  try {
+    const result = await pool.query(
+      'INSERT INTO realtime_events(channel,event_type) VALUES($1,$2) RETURNING id',
+      [channel, eventType],
+    );
+    await pool.query("SELECT pg_notify('erp_realtime',$1)", [String(result.rows[0].id)]);
+    if (Number(result.rows[0].id) % 100 === 0) {
+      await pool.query("DELETE FROM realtime_events WHERE created_at < NOW()-INTERVAL '7 days'");
+    }
+  } catch (error) {
+    // Nghiệp vụ chính đã thành công; polling dự phòng sẽ đồng bộ nếu kênh
+    // realtime tạm gián đoạn, vì vậy không trả lỗi giả cho thao tác của người dùng.
+    console.error('Không thể phát sự kiện realtime:', error);
+  }
+}
 
 const normalizedPosition = (employee: EmployeeAccountSource) => String(employee.role || '')
   .trim()
@@ -337,6 +387,33 @@ app.get('/api/health', async (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+app.get('/api/realtime/events', authenticate, async (req, res) => {
+  const rawAfter = req.query.after;
+  if (rawAfter === undefined) {
+    const latest = await pool.query('SELECT COALESCE(MAX(id),0) AS cursor FROM realtime_events');
+    return res.json({ cursor: Number(latest.rows[0].cursor), events: [] });
+  }
+  const after = Number(rawAfter);
+  if (!Number.isSafeInteger(after) || after < 0) return res.status(400).json({ error: 'Con trỏ realtime không hợp lệ.' });
+
+  await ensureRealtimeListener();
+  const readEvents = () => pool.query(
+    'SELECT id,channel,event_type,created_at FROM realtime_events WHERE id>$1 ORDER BY id ASC LIMIT 100',
+    [after],
+  );
+  let result = await readEvents();
+  if (!result.rowCount) {
+    await new Promise<void>(resolve => {
+      const finish = () => { clearTimeout(timer); realtimeSignal.off('change', finish); resolve(); };
+      const timer = setTimeout(finish, 8_000);
+      realtimeSignal.once('change', finish);
+    });
+    result = await readEvents();
+  }
+  const cursor = result.rowCount ? Number(result.rows[result.rows.length - 1].id) : after;
+  res.json({ cursor, events: result.rows });
+});
+
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim().toLowerCase();
   const pin = String(req.body.pin || '');
@@ -389,6 +466,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin,session_version', [username, employee.name, role, await bcrypt.hash(pin, 12), linkedEmployeeId]);
     const row = result.rows[0];
     const user: SessionUser = { id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id, mustChangePassword: false, sessionVersion: Number(row.session_version) };
+    await publishRealtimeEvent('accounts', 'account_registered');
     res.status(201).json({ token: sign(user), user });
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không đăng ký được tài khoản.' });
@@ -404,6 +482,7 @@ app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => 
   if (!result.rows[0] || !(await bcrypt.compare(currentPin, result.rows[0].pin_hash))) return res.status(401).json({ error: 'Mật khẩu hiện tại không đúng.' });
   await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=FALSE, session_version=session_version+1 WHERE id=$2', [await bcrypt.hash(newPin, 12), user.id]);
   await pool.query('INSERT INTO audit_log(user_id,action) VALUES($1,$2)', [user.id, 'pin_changed']);
+  await publishRealtimeEvent('accounts', 'account_password_changed');
   res.json({ success: true });
 });
 
@@ -477,6 +556,7 @@ app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res)
   const hash = await bcrypt.hash(String(pin), 12);
   try {
     const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, effectiveFullName, effectiveRole, hash, employeeId ? normalizeEmployeeId(employeeId) : null]);
+    await publishRealtimeEvent('accounts', 'account_created');
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không tạo được tài khoản.' });
@@ -486,6 +566,7 @@ app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res)
 app.patch('/api/admin/users/:id/status', authenticate, requireRoles('CEO'), async (req, res) => {
   const result = await pool.query('UPDATE app_users SET active=$1,session_version=session_version+1 WHERE id=$2 RETURNING id,active', [Boolean(req.body.active), req.params.id]);
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'account_status_changed', { targetUserId: req.params.id, active: Boolean(req.body.active) }]);
+  await publishRealtimeEvent('accounts', 'account_status_changed');
   res.json(result.rows[0]);
 });
 
@@ -494,6 +575,7 @@ app.post('/api/admin/users/:id/reset-pin', authenticate, requireRoles('CEO'), as
   if (!/^\d{6,12}$/.test(pin)) return res.status(400).json({ error: 'Mật khẩu phải có 6–12 chữ số.' });
   await pool.query('UPDATE app_users SET pin_hash=$1, must_change_pin=TRUE, session_version=session_version+1 WHERE id=$2', [await bcrypt.hash(pin, 12), req.params.id]);
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'password_reset', { targetUserId: req.params.id }]);
+  await publishRealtimeEvent('accounts', 'account_password_reset');
   res.json({ success: true });
 });
 
@@ -501,6 +583,7 @@ app.post('/api/admin/provision-employees', authenticate, requireRoles('CEO'), as
   const state = await pool.query('SELECT payload FROM erp_state WHERE id=1');
   const employees = Array.isArray(state.rows[0]?.payload?.employees) ? state.rows[0].payload.employees : [];
   const created = await provisionEmployeeAccounts(employees);
+  await publishRealtimeEvent('accounts', 'accounts_provisioned');
   res.json({ success: true, created, totalEmployees: employees.filter((item: EmployeeAccountSource) => item.active !== false).length });
 });
 
@@ -515,6 +598,7 @@ app.delete('/api/admin/users/:id', authenticate, requireRoles('CEO'), async (req
   await pool.query('UPDATE payroll_periods SET locked_by=NULL WHERE locked_by=$1', [req.params.id]);
   await pool.query('DELETE FROM notifications WHERE user_id=$1', [req.params.id]);
   await pool.query('DELETE FROM app_users WHERE id=$1', [req.params.id]);
+  await publishRealtimeEvent('accounts', 'account_deleted');
   res.json({ success: true });
 });
 
@@ -571,6 +655,8 @@ app.post('/api/workforce/requests', authenticate, requireRoles('Employee'), asyn
     .flatMap((item: EmployeeAccountSource) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
   const reviewers = await pool.query("SELECT id FROM app_users WHERE active=TRUE AND (role='CEO' OR (role='SiteManager' AND UPPER(employee_id)=ANY($1::text[])))", [managerIds]);
   for (const reviewer of reviewers.rows) await pool.query("INSERT INTO notifications(id,user_id,title,message,category) VALUES($1,$2,$3,$4,'approval')", [randomUUID(), reviewer.id, 'Yêu cầu mới cần duyệt', `${user.fullName} vừa gửi một yêu cầu ${requestType}.`]);
+  await publishRealtimeEvent('workforce_requests', 'request_created');
+  await publishRealtimeEvent('notifications', 'notification_created');
   res.status(201).json(result.rows[0]);
 });
 
@@ -589,6 +675,8 @@ app.patch('/api/workforce/requests/:id/review', authenticate, requireRoles('CEO'
   const row = result.rows[0];
   if (row) await pool.query("INSERT INTO notifications(id,employee_id,title,message,category) VALUES($1,$2,$3,$4,'request')", [randomUUID(), row.employee_id, 'Yêu cầu đã được xử lý', `Yêu cầu của bạn đã ${status === 'approved' ? 'được duyệt' : 'bị từ chối'}.`]);
   if (!row) return res.status(404).json({ error: 'Yêu cầu không tồn tại, đã được xử lý hoặc nằm ngoài công trường được phân quyền.' });
+  await publishRealtimeEvent('workforce_requests', 'request_reviewed');
+  await publishRealtimeEvent('notifications', 'notification_created');
   res.json(row);
 });
 
@@ -614,6 +702,7 @@ app.post('/api/workforce/shifts', authenticate, requireRoles('CEO','SiteManager'
     if (!projectIds.has(String(projectId)) || !employee || !projectIds.has(String(employee.projectId))) return res.status(403).json({ error: 'Bạn chỉ được phân ca cho nhân viên thuộc công trường mình quản lý.' });
   }
   const result = await pool.query('INSERT INTO work_shifts(id,employee_id,project_id,shift_date,start_time,end_time,shift_name,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(employee_id,shift_date) DO UPDATE SET project_id=EXCLUDED.project_id,start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,shift_name=EXCLUDED.shift_name RETURNING *', [randomUUID(), employeeId, projectId, shiftDate, startTime, endTime, shiftName, user.id]);
+  await publishRealtimeEvent('shifts', 'shift_saved');
   res.json(result.rows[0]);
 });
 
@@ -627,6 +716,7 @@ app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CE
   if (payrollLocked && !attendanceLocked) return res.status(400).json({ error: 'Phải khóa bảng công trước khi khóa bảng lương.' });
   const result = await pool.query('INSERT INTO payroll_periods(period,attendance_locked,payroll_locked,locked_by,locked_at) VALUES($1,$2,$3,$4,NOW()) ON CONFLICT(period) DO UPDATE SET attendance_locked=EXCLUDED.attendance_locked,payroll_locked=EXCLUDED.payroll_locked,locked_by=EXCLUDED.locked_by,locked_at=NOW() RETURNING *', [period, attendanceLocked, payrollLocked, user.id]);
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'payroll_period_lock_changed', { period, attendanceLocked, payrollLocked }]);
+  await publishRealtimeEvent('payroll_periods', 'period_updated');
   res.json(result.rows[0]);
 });
 
@@ -644,6 +734,7 @@ app.patch('/api/notifications/:id/read', authenticate, async (req, res) => {
     [req.params.id, user.id, user.employeeId || null, allowGlobal],
   );
   if (!result.rowCount) return res.status(404).json({ error: 'Thông báo không tồn tại.' });
+  await publishRealtimeEvent('notifications', 'notification_read');
   res.json({ success: true });
 });
 app.post('/api/payslips/:period/viewed', authenticate, requireRoles('Employee'), async (req, res) => {
@@ -776,6 +867,7 @@ app.put('/api/state', authenticate, async (req, res) => {
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'state_updated', { revision: result.rows[0].revision }]);
   if (Array.isArray(permittedPayload.employees) && ['CEO', 'SiteManager'].includes(user.role)) {
     await provisionEmployeeAccounts(permittedPayload.employees);
+    await publishRealtimeEvent('accounts', 'accounts_provisioned');
   }
   const projectIds = (permittedPayload.projects as JsonRecord[]).map(item => String(item.id));
   const employeeIds = (permittedPayload.employees as JsonRecord[]).flatMap(item => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
