@@ -6,6 +6,48 @@
   --font-serif: "Times New Roman", Times, Georgia, Cambria, serif;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+@media (max-width: 767px) {
+  main :where(input, select, textarea, button) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  main :where(.grid.grid-cols-2, .grid.grid-cols-3, .grid.grid-cols-4, .grid.grid-cols-5) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  main :where(.overflow-x-auto, .overflow-hidden):has(> table) {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  main table {
+    min-width: 640px;
+  }
+
+  main :where(.fixed.inset-0) > :where(div, section, form) {
+    max-width: calc(100vw - 1.5rem);
+  }
+}
+
 @media print {
   /* Hide the entire React app by default in printing */
   body * {

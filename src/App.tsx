@@ -30,7 +30,7 @@ const WorkforceAdmin = lazy(() => import('./components/WorkforceAdmin'));
 const MasterDataEditor = lazy(() => import('./components/MasterDataEditor'));
 
 // Icons
-import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, LogOut, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, LogOut, ChevronDown, Menu } from 'lucide-react';
 
 const DEFAULT_COMPANY_CONFIG: CompanyConfig = {
   companyName: 'Công Ty Cổ Phần Xây Dựng', siteOffice: 'Tp Hồ Chí Minh', taxCode: '', officeAddress: 'Tp Hồ Chí Minh', directorName: '', chiefAccountantName: '', treasurerName: '', technicianName: '',
@@ -70,6 +70,7 @@ export default function App() {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
   const [openNavGroups, setOpenNavGroups] = useState<Record<'director' | 'project' | 'accounting', boolean>>({ director: true, project: false, accounting: false });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // --- CURRENT ROLE FOR ROLE-BASED ACCESS CONTROL (RBAC) ---
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
@@ -157,7 +158,8 @@ export default function App() {
     if (isTabRestricted(tab)) {
       setPermissionDeniedMsg(`Bạn không có quyền truy cập phân hệ "${label}" với tài khoản hiện tại.`);
     } else {
-      setActiveTab(tab);
+    setActiveTab(tab);
+    setMobileNavOpen(false);
     }
   }, [isTabRestricted, currentUserRole]);
 
@@ -895,9 +897,9 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden" id="app-root">
+    <div className="flex h-[100dvh] min-h-0 w-full min-w-0 flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 md:flex-row" id="app-root">
       {serverMode && serverSyncError && (
-        <div role="alert" className="fixed z-50 right-4 bottom-4 max-w-md rounded-xl bg-rose-950 px-4 py-3 text-xs font-semibold text-white shadow-2xl">
+        <div role="alert" className="fixed inset-x-3 bottom-3 z-50 max-w-md rounded-xl bg-rose-950 px-4 py-3 text-xs font-semibold text-white shadow-2xl sm:inset-x-auto sm:bottom-4 sm:right-4">
           <div>Đồng bộ máy chủ gặp lỗi: {serverSyncError} Dữ liệu vẫn được giữ tạm trên trình duyệt.</div>
           {serverSyncStatus === 'conflict' && <div className="mt-3 flex gap-2">
             <button className="rounded bg-white px-3 py-1.5 font-bold text-rose-950" onClick={() => resolveServerConflict('server').catch(error => setServerSyncError(error.message))}>Tải bản máy chủ</button>
@@ -907,25 +909,26 @@ export default function App() {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-slate-900 flex flex-col shrink-0 border-b md:border-b-0 md:border-r border-slate-850">
+      <aside className="z-40 flex w-full min-w-0 shrink-0 flex-col border-b border-slate-850 bg-slate-900 md:h-full md:w-64 md:border-b-0 md:border-r">
         {/* Brand Header */}
-        <div className="p-4 md:p-6 flex items-center justify-between md:justify-start gap-3 border-b border-slate-800 shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 p-3.5 md:justify-start md:p-6">
+          <div className="flex min-w-0 items-center gap-3">
             <img src="/app-avatar-192.png" alt="Biểu tượng ứng dụng" className="w-9 h-9 rounded-lg object-cover shadow-lg shadow-blue-500/20 ring-1 ring-white/10" />
-            <div className="flex flex-col">
-              <span className="text-white font-bold text-sm md:text-base tracking-tight leading-none uppercase">
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-bold uppercase leading-none tracking-tight text-white md:text-base">
                 {companyConfig?.appTitle || 'Quản trị doanh nghiệp'}
               </span>
               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-1">STANDARD V1.0</span>
             </div>
           </div>
-          <div className="md:hidden flex items-center gap-1.5 bg-slate-800 px-2 py-0.5 rounded text-[9px] text-emerald-400 font-extrabold uppercase tracking-wider">
-            Mobile Mode
-          </div>
+          <button type="button" onClick={() => setMobileNavOpen(open => !open)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3 text-xs font-black text-white md:hidden" aria-expanded={mobileNavOpen} aria-label={mobileNavOpen ? 'Đóng menu' : 'Mở menu'}>
+            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            Menu
+          </button>
         </div>
 
         {/* Compact dropdown navigation */}
-        <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+        <nav className={`${mobileNavOpen ? 'block' : 'hidden'} max-h-[calc(100dvh-68px)] flex-1 space-y-2 overflow-y-auto p-3 md:block md:max-h-none`}>
           {NAV_GROUPS.map(group => {
             const visibleItems = group.items.filter(item => !isTabRestricted(item.tab));
             if (!visibleItems.length) return null;
@@ -1179,12 +1182,12 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:h-full">
 
         {/* Upper Top Navbar Header */}
-        <header className="h-auto py-3 md:h-16 bg-white border-b border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between px-4 md:px-8 gap-3 shrink-0 shadow-3xs">
-          <div className="shrink-0">
-            <h1 className="text-xs md:text-sm lg:text-base font-black text-slate-800 tracking-tight flex items-center gap-1.5 md:gap-2">
+        <header className="flex h-auto shrink-0 flex-col items-stretch justify-between gap-3 border-b border-slate-200 bg-white px-3 py-3 shadow-3xs sm:px-4 md:h-16 md:flex-row md:items-center md:px-8">
+          <div className="min-w-0 md:shrink-0">
+            <h1 className="break-words text-xs font-black tracking-tight text-slate-800 md:flex md:items-center md:gap-2 md:text-sm lg:text-base">
               {activeTab === 'dashboard' && '📊 Bảng Điều Khiển Tài Chính & P&L Công Trường'}
               {activeTab === 'projects' && '🏗️ Quản Lý Dự Án & Công Trường'}
               {activeTab === 'journal' && '📖 Sổ Nhật Ký Chung Kế Toán Chuẩn Thông Tư 200'}
@@ -1323,11 +1326,11 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end shrink-0">
+          <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:w-auto sm:justify-end md:shrink-0">
             {/* Current Role Badge & Log Out */}
-            <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg shadow-3xs shrink-0" id="role-control-panel">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1.5 shadow-3xs sm:flex-none" id="role-control-panel">
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">
+              <span className="min-w-0 flex-1 truncate text-[10px] font-black uppercase tracking-tight text-slate-800 sm:text-[11px]">
                 {currentUserFullName ? `${currentUserFullName} (` : ''}
                 {currentUserRole === 'CEO' && '💼 CEO / Giám Đốc'}
                 {currentUserRole === 'ChiefAccountant' && '🧮 Kế Toán Trưởng'}
@@ -1378,8 +1381,8 @@ export default function App() {
         </header>
 
         {/* Content Body Area */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50">
-          <div className="max-w-7xl mx-auto space-y-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-50/50 p-3 sm:p-4 md:p-8">
+          <div className="mx-auto min-w-0 max-w-7xl space-y-4 md:space-y-6">
 
             {/* Header Mini Dashboard Quick Stats */}
             {activeTab === 'dashboard' && (

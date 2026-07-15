@@ -1,4 +1,4 @@
-const CACHE = 'quan-tri-doanh-nghiep-v4';
+const CACHE = 'quan-tri-doanh-nghiep-v5';
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/','/manifest.webmanifest','/app-avatar-192.png','/app-avatar-512.png']))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))));
 self.addEventListener('fetch', event => {

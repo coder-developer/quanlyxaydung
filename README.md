@@ -38,7 +38,7 @@ Bản VPS gồm React, API Node.js và PostgreSQL. Dữ liệu được dùng ch
 Trên VPS Ubuntu/Debian/RHEL mới, chạy:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/v1.1.0/install-vps.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/v1.1.1/install-vps.sh | sudo sh
 ```
 
 Trình cài tự cài Docker, tạo bí mật ngẫu nhiên, build container, kiểm tra health và cài lịch backup. Thông tin đăng nhập CEO ban đầu được lưu tại `/opt/quanlyxaydung/.installation-credentials` với quyền chỉ root đọc. Có thể truyền `REPO_REF` để cài phiên bản khác hoặc tải gói ZIP VPS và chạy `sudo sh install-vps.sh` trong thư mục đã giải nén.

@@ -355,7 +355,7 @@ export default function LoginScreen({
   );
 
   return (
-    <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans text-slate-100" id="login-container">
+    <div className="relative flex min-h-[100dvh] w-full min-w-0 items-center justify-center overflow-x-hidden bg-slate-900 p-3 font-sans text-slate-100 sm:p-4" id="login-container">
       {/* Decorative Blueprint Background Grid */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
         backgroundImage: `radial-gradient(circle, #fff 1px, transparent 1px)`,
@@ -363,14 +363,14 @@ export default function LoginScreen({
       }}></div>
 
       {/* Modern Centered Glass Card */}
-      <div className="w-full max-w-xl bg-slate-850/90 border border-slate-750 rounded-2xl shadow-2xl p-6 md:p-8 relative z-10 backdrop-blur-md animate-fade-in" id="login-card">
+      <div className="relative z-10 max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-xl overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-750 bg-slate-850/90 p-4 shadow-2xl backdrop-blur-md animate-fade-in sm:p-6 md:p-8" id="login-card">
         {/* Logo / Header block */}
         <div className="text-center mb-6">
           <img src="/app-avatar-192.png" alt="Biểu tượng Quản trị doanh nghiệp" className="inline-block w-16 h-16 rounded-2xl object-cover mb-3 shadow-xl shadow-blue-500/20 ring-1 ring-white/10" />
           <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white mb-1">
             {appTitle}
           </h2>
-          <p className="text-[10px] md:text-xs font-bold text-slate-400 tracking-wider uppercase">
+          <p className="break-words text-[10px] font-bold uppercase tracking-wider text-slate-400 md:text-xs">
             {companyName}
           </p>
           <div className="h-px w-20 bg-blue-500 mx-auto mt-4"></div>
@@ -657,7 +657,7 @@ export default function LoginScreen({
               <span className="text-[9px] text-slate-500 block">Viết liền, không dấu, ít nhất 3 ký tự, dùng để đăng nhập.</span>
             </div>
 
-            {serverMode && <div className="grid grid-cols-2 gap-3"><div className="space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Mã nhân viên *</label><input className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regEmployeeCode} onChange={e=>setRegEmployeeCode(e.target.value)} placeholder="emp-17 hoặc mã NV" required/></div><div className="space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Số điện thoại hồ sơ *</label><input className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regPhone} onChange={e=>setRegPhone(e.target.value.replace(/\D/g,''))} placeholder="0961001001" required/></div></div>}
+            {serverMode && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="min-w-0 space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Mã nhân viên *</label><input className="block w-full min-w-0 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regEmployeeCode} onChange={e=>setRegEmployeeCode(e.target.value)} placeholder="emp-17 hoặc mã NV" required/></div><div className="min-w-0 space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Số điện thoại hồ sơ *</label><input className="block w-full min-w-0 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regPhone} onChange={e=>setRegPhone(e.target.value.replace(/\D/g,''))} placeholder="0961001001" required/></div></div>}
 
             {!serverMode && <>
             {/* Full Name */}
@@ -702,7 +702,7 @@ export default function LoginScreen({
               <p className="text-[10px] text-slate-400">OTP hết hạn sau 10 phút. Sau xác minh, CEO phải duyệt trước khi tài khoản hoạt động.</p>
             </div> : <>
             {/* Pin Code & Confirm PIN Grid */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
