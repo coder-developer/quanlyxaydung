@@ -114,6 +114,121 @@ export async function migrate() {
       created_by BIGINT REFERENCES app_users(id),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS project_registry (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS equipment_registry (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS accounting_vouchers (
+      id TEXT PRIMARY KEY,
+      voucher_type TEXT NOT NULL CHECK (voucher_type IN ('Receipt','Payment')),
+      voucher_no TEXT NOT NULL UNIQUE,
+      voucher_date DATE NOT NULL,
+      project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      debit_account TEXT NOT NULL,
+      credit_account TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+      description TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      row_version INTEGER NOT NULL DEFAULT 1,
+      created_by BIGINT REFERENCES app_users(id),
+      updated_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS journal_entries (
+      id TEXT PRIMARY KEY,
+      posting_date DATE NOT NULL,
+      voucher_no TEXT NOT NULL,
+      project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      debit_account TEXT NOT NULL,
+      credit_account TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
+      description TEXT NOT NULL,
+      source_module TEXT NOT NULL DEFAULT 'Manual',
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      row_version INTEGER NOT NULL DEFAULT 1,
+      created_by BIGINT REFERENCES app_users(id),
+      updated_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS equipment_fuel_logs (
+      id TEXT PRIMARY KEY,
+      equipment_id TEXT NOT NULL REFERENCES equipment_registry(id) ON UPDATE CASCADE ON DELETE CASCADE,
+      project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      log_date DATE NOT NULL,
+      quantity NUMERIC(18,3) NOT NULL CHECK (quantity > 0),
+      cost NUMERIC(18,2) NOT NULL CHECK (cost >= 0),
+      recorded_by_name TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      row_version INTEGER NOT NULL DEFAULT 1,
+      created_by BIGINT REFERENCES app_users(id),
+      updated_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS equipment_maintenance_logs (
+      id TEXT PRIMARY KEY,
+      equipment_id TEXT NOT NULL REFERENCES equipment_registry(id) ON UPDATE CASCADE ON DELETE CASCADE,
+      project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      log_date DATE NOT NULL,
+      maintenance_type TEXT NOT NULL CHECK (maintenance_type IN ('Routine','Repair','Inspection')),
+      cost NUMERIC(18,2) NOT NULL CHECK (cost >= 0),
+      details TEXT NOT NULL,
+      technician TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      row_version INTEGER NOT NULL DEFAULT 1,
+      created_by BIGINT REFERENCES app_users(id),
+      updated_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS equipment_dispatches (
+      id TEXT PRIMARY KEY,
+      equipment_id TEXT NOT NULL REFERENCES equipment_registry(id) ON UPDATE CASCADE ON DELETE CASCADE,
+      from_project_id TEXT REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE SET NULL,
+      to_project_id TEXT NOT NULL REFERENCES project_registry(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+      dispatch_date DATE NOT NULL,
+      cost NUMERIC(18,2) NOT NULL CHECK (cost >= 0),
+      recorded_by_name TEXT NOT NULL,
+      carrier_unit TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      row_version INTEGER NOT NULL DEFAULT 1,
+      created_by BIGINT REFERENCES app_users(id),
+      updated_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS registration_requests (
+      id UUID PRIMARY KEY,
+      username TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      pin_hash TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      otp_attempts INTEGER NOT NULL DEFAULT 0,
+      otp_expires_at TIMESTAMPTZ NOT NULL,
+      otp_verified_at TIMESTAMPTZ,
+      status TEXT NOT NULL DEFAULT 'otp_pending' CHECK (status IN ('otp_pending','pending_approval','approved','rejected','expired')),
+      reviewed_by BIGINT REFERENCES app_users(id),
+      reviewed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS accounting_vouchers_project_date_idx ON accounting_vouchers(project_id,voucher_date DESC);
+    CREATE INDEX IF NOT EXISTS journal_entries_project_date_idx ON journal_entries(project_id,posting_date DESC);
+    CREATE INDEX IF NOT EXISTS equipment_fuel_logs_equipment_date_idx ON equipment_fuel_logs(equipment_id,log_date DESC);
+    CREATE INDEX IF NOT EXISTS equipment_maintenance_logs_equipment_date_idx ON equipment_maintenance_logs(equipment_id,log_date DESC);
+    CREATE INDEX IF NOT EXISTS equipment_dispatches_equipment_date_idx ON equipment_dispatches(equipment_id,dispatch_date DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS registration_requests_open_employee_idx ON registration_requests(employee_id) WHERE status IN ('otp_pending','pending_approval');
     INSERT INTO erp_state (id,payload) VALUES (1, jsonb_build_object(
       'companyConfig', jsonb_build_object(
         'companyName','Công Ty Cổ Phần Xây Dựng','siteOffice','Tp Hồ Chí Minh','taxCode','','officeAddress','Tp Hồ Chí Minh','directorName','','chiefAccountantName','','treasurerName','','technicianName','',

@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Project, Equipment, FinancialTransaction, CompanyConfig, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
+import { createOperation, listOperations } from '../lib/api';
+import { subscribeRealtime } from '../lib/realtime';
 import {
   Wrench, Truck, AlertCircle, Plus, ClipboardList, CheckCircle2,
   MapPin, HelpCircle, Activity, Gauge, Calendar, DollarSign, PenSquare,
@@ -25,6 +27,7 @@ interface FuelLog {
   litersOrKw: number;
   cost: number;
   recordedBy: string;
+  rowVersion?: number;
 }
 
 interface MaintenanceLog {
@@ -35,6 +38,7 @@ interface MaintenanceLog {
   cost: number;
   details: string;
   technician: string;
+  rowVersion?: number;
 }
 
 interface DispatchLog {
@@ -49,6 +53,7 @@ interface DispatchLog {
   cost: number;
   recordedBy: string;
   carrierUnit: string;
+  rowVersion?: number;
 }
 
 export default function EquipmentManager({
@@ -62,50 +67,9 @@ export default function EquipmentManager({
   userRole
 }: EquipmentManagerProps) {
   const canManageOperations = userRole === 'CEO' || userRole === 'SiteManager' || userRole === 'SiteAccountant';
-  // Fuel log in-memory state
-  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([
-    { id: 'f-1', equipmentId: 'eq-1', date: '2026-07-01', litersOrKw: 150, cost: 3500000, recordedBy: 'Kỹ sư Tú' },
-    { id: 'f-2', equipmentId: 'eq-1', date: '2026-07-05', litersOrKw: 220, cost: 5200000, recordedBy: 'Kỹ sư Tú' },
-    { id: 'f-3', equipmentId: 'eq-2', date: '2026-07-03', litersOrKw: 180, cost: 4200000, recordedBy: 'Kỹ sư Lâm' },
-    { id: 'f-4', equipmentId: 'eq-4', date: '2026-07-04', litersOrKw: 120, cost: 2800000, recordedBy: 'Hải Đăng' }
-  ]);
-
-  // Maintenance log in-memory state
-  const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([
-    { id: 'm-1', equipmentId: 'eq-1', date: '2026-05-10', type: 'Routine', cost: 12000000, details: 'Thay dầu động cơ, lọc nhớt, vệ sinh hệ thống xích di chuyển', technician: 'Mã Văn Tài' },
-    { id: 'm-2', equipmentId: 'eq-2', date: '2026-04-15', type: 'Repair', cost: 8500000, details: 'Khắc phục xì xẹp phớt thủy lực xi lanh rung', technician: 'Trần Vũ Hoàng' },
-    { id: 'm-3', equipmentId: 'eq-4', date: '2026-05-20', type: 'Routine', cost: 5000000, details: 'Kiểm tra hộp số tự hành, thay cánh trộn mòn', technician: 'Nguyễn Văn Định' }
-  ]);
-
-  // Dispatch logs history state
-  const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>([
-    {
-      id: 'disp-1',
-      equipmentId: 'eq-1',
-      equipmentName: 'Máy xúc bánh xích Komatsu PC200',
-      fromProjectId: 'all',
-      fromProjectName: 'Kho ',
-      toProjectId: 'proj-1',
-      toProjectName: 'Chung cư cao cấp Green River',
-      date: '2026-06-15',
-      cost: 5000000,
-      recordedBy: 'Kỹ sư Tú',
-      carrierUnit: 'Công ty CP Vận tải Cơ giới Miền Trung'
-    },
-    {
-      id: 'disp-2',
-      equipmentId: 'eq-2',
-      equipmentName: 'Xe lu rung Hamm 3411 (11 Tấn)',
-      fromProjectId: 'all',
-      fromProjectName: 'Kho ',
-      toProjectId: 'proj-4',
-      toProjectName: 'Khu đô thị sinh thái EcoGarden',
-      date: '2026-06-28',
-      cost: 6500000,
-      recordedBy: 'Kỹ sư Lâm',
-    carrierUnit: 'Tổng công ty Cứu hộ 911'
-    }
-  ]);
+  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
+  const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
+  const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>([]);
 
   // UI state filters
   const [selectedEquipId, setSelectedEquipId] = useState<string>(equipment[0]?.id || '');
@@ -147,6 +111,18 @@ export default function EquipmentManager({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const loadOperationalLogs = useCallback(async () => {
+    const [fuel, maintenance, dispatches] = await Promise.all([
+      listOperations<FuelLog>('fuel'), listOperations<MaintenanceLog>('maintenance'), listOperations<DispatchLog>('dispatches'),
+    ]);
+    setFuelLogs(fuel); setMaintenanceLogs(maintenance); setDispatchLogs(dispatches);
+  }, []);
+
+  useEffect(() => {
+    loadOperationalLogs().catch(error => showToast(error instanceof Error ? error.message : 'Không tải được nhật ký thiết bị.'));
+    return subscribeRealtime(['operations'], () => { loadOperationalLogs().catch(() => undefined); });
+  }, [loadOperationalLogs]);
 
   const selectedEquipmentDetail = useMemo(() => {
     return equipment.find(eq => eq.id === selectedEquipId);
@@ -203,7 +179,7 @@ export default function EquipmentManager({
   };
 
   // Handle Dispatching Equipment
-  const handleDispatch = (e: React.FormEvent) => {
+  const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || !dispatchTargetProjId) return;
@@ -225,29 +201,6 @@ export default function EquipmentManager({
       return e;
     }));
 
-    // 2. Add surcharge transport expense transaction to project
-    const newTx: FinancialTransaction = {
-      id: `tx-eq-dis-${Date.now()}`,
-      projectId: dispatchTargetProjId,
-      type: 'Expense',
-      category: 'Equipment',
-      amount: dispatchSurcharge,
-      description: `Chi phí xe fooc vận chuyển điều động cẩu/máy xúc [${eq.name}] sang ${targetProj.name}`,
-      date: new Date().toISOString().split('T')[0]
-    };
-    setTransactions(prev => [newTx, ...prev]);
-
-    // 3. Increment target project spent cost
-    setProjects(prev => prev.map(p => {
-      if (p.id === dispatchTargetProjId) {
-        return {
-          ...p,
-          spent: p.spent + dispatchSurcharge
-        };
-      }
-      return p;
-    }));
-
     // Find source project details
     const sourceProj = projects.find(p => p.id === eq.currentProjectId);
     const sourceName = sourceProj ? sourceProj.name : 'Kho ';
@@ -266,14 +219,17 @@ export default function EquipmentManager({
       recordedBy: 'Điều phối viên ',
       carrierUnit: 'Công ty vận tải cơ giới liên kết 911'
     };
-    setDispatchLogs(prev => [newDispatchLog, ...prev]);
+    try {
+      const saved = await createOperation<DispatchLog>('dispatches', newDispatchLog);
+      setDispatchLogs(prev => [saved, ...prev]);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Không lưu được lệnh điều động.'); return; }
 
     setShowDispatchModal(false);
     showToast(`Đã điều động thành công ${eq.name} sang công trình ${targetProj.name}!`);
   };
 
   // Handle Logging Fuel / Electricity
-  const handleLogFuel = (e: React.FormEvent) => {
+  const handleLogFuel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || newFuelCost <= 0) return;
@@ -290,7 +246,10 @@ export default function EquipmentManager({
       cost: newFuelCost,
       recordedBy: newFuelRecorder || 'Người điều phối'
     };
-    setFuelLogs(prev => [newLog, ...prev]);
+    try {
+      const saved = await createOperation<FuelLog>('fuel', newLog);
+      setFuelLogs(prev => [saved, ...prev]);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Không lưu được phiếu nhiên liệu.'); return; }
 
     // 2. Increment fuelCostThisMonth on machinery
     setEquipment(prev => prev.map(e => {
@@ -303,36 +262,13 @@ export default function EquipmentManager({
       return e;
     }));
 
-    // 3. Create Expense transaction
-    const newTx: FinancialTransaction = {
-      id: `tx-fuel-${Date.now()}`,
-      projectId: eq.currentProjectId,
-      type: 'Expense',
-      category: 'Equipment',
-      amount: newFuelCost,
-      description: `Nhiên liệu vận hành (xăng/diesel/điện) cho thiết bị [${eq.name}]`,
-      date: newFuelDate
-    };
-    setTransactions(prev => [newTx, ...prev]);
-
-    // 4. Update project spent
-    setProjects(prev => prev.map(p => {
-      if (p.id === eq.currentProjectId) {
-        return {
-          ...p,
-          spent: p.spent + newFuelCost
-        };
-      }
-      return p;
-    }));
-
     showToast(`Đã cập nhật chi phí nhiên liệu ${newFuelCost.toLocaleString()} VND cho ${eq.name}!`);
     setNewFuelQty(100);
     setNewFuelCost(2300000);
   };
 
   // Handle Logging Maintenance
-  const handleLogMaint = (e: React.FormEvent) => {
+  const handleLogMaint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || newMaintCost <= 0) return;
@@ -350,7 +286,10 @@ export default function EquipmentManager({
       details: newMaintDetails,
       technician: newMaintTech || 'Tổ sửa chữa cơ giới'
     };
-    setMaintenanceLogs(prev => [newLog, ...prev]);
+    try {
+      const saved = await createOperation<MaintenanceLog>('maintenance', newLog);
+      setMaintenanceLogs(prev => [saved, ...prev]);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Không lưu được phiếu bảo trì.'); return; }
 
     // 2. Put equipment back to available or available after maintenance
     setEquipment(prev => prev.map(e => {
@@ -364,29 +303,6 @@ export default function EquipmentManager({
         };
       }
       return e;
-    }));
-
-    // 3. Create expense transaction
-    const newTx: FinancialTransaction = {
-      id: `tx-maint-${Date.now()}`,
-      projectId: eq.currentProjectId,
-      type: 'Expense',
-      category: 'Equipment',
-      amount: newMaintCost,
-      description: `Chi phí bảo dưỡng/sửa chữa [${eq.name}]: ${newMaintDetails}`,
-      date: newMaintDate
-    };
-    setTransactions(prev => [newTx, ...prev]);
-
-    // 4. Update project spent
-    setProjects(prev => prev.map(p => {
-      if (p.id === eq.currentProjectId) {
-        return {
-          ...p,
-          spent: p.spent + newMaintCost
-        };
-      }
-      return p;
     }));
 
     showToast(`Đã hạch toán bảo dưỡng thiết bị ${eq.name} thành công!`);

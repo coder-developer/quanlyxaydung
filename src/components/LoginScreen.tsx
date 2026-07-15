@@ -15,7 +15,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
-import { apiChangePin, apiLogin, apiRegister, type ApiUser } from '../lib/api';
+import { apiChangePin, apiLogin, apiRegister, apiVerifyRegistrationOtp, type ApiUser } from '../lib/api';
 
 interface LoginScreenProps {
   onLoginSuccess: (role: UserRole, fullName?: string, employeeId?: string) => void;
@@ -67,6 +67,9 @@ export default function LoginScreen({
   const [regEmployeeCode, setRegEmployeeCode] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [showRegPin, setShowRegPin] = useState(false);
+  const [registrationRequestId, setRegistrationRequestId] = useState('');
+  const [registrationOtp, setRegistrationOtp] = useState('');
+  const [otpPreview, setOtpPreview] = useState('');
 
   // List of registered users
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
@@ -266,11 +269,22 @@ export default function LoginScreen({
     }
 
     if (serverMode) {
+      if (registrationRequestId) {
+        try {
+          await apiVerifyRegistrationOtp(registrationRequestId, registrationOtp);
+          setRegistrationRequestId(''); setRegistrationOtp(''); setOtpPreview('');
+          setSuccessMsg('OTP hợp lệ. Yêu cầu đã gửi tới CEO phê duyệt; bạn sẽ đăng nhập sau khi tài khoản được duyệt.');
+          setActiveMode('login');
+        } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Không xác minh được OTP.'); }
+        return;
+      }
       if (!/^\d{6,12}$/.test(regPin)) { setErrorMsg('Mật khẩu đăng ký phải có 6–12 chữ số.'); return; }
       if (regPin !== regConfirmPin) { setErrorMsg('Xác nhận mật khẩu không trùng khớp.'); return; }
       try {
-        const { user } = await apiRegister(cleanUsername, regEmployeeCode.trim(), regPhone, regPin);
-        onLoginSuccess(user.role, user.fullName, user.employeeId);
+        const request = await apiRegister(cleanUsername, regEmployeeCode.trim(), regPhone, regPin);
+        setRegistrationRequestId(request.requestId);
+        setOtpPreview(request.otpPreview || '');
+        setSuccessMsg('Đã gửi OTP. Nhập mã xác minh để chuyển yêu cầu tới CEO phê duyệt.');
       } catch (error) {
         setErrorMsg(error instanceof Error ? error.message : 'Không đăng ký được tài khoản.');
       }
@@ -681,6 +695,12 @@ export default function LoginScreen({
             </div>
             </>}
 
+            {serverMode && registrationRequestId ? <div className="space-y-2 rounded-xl border border-blue-800 bg-blue-950/40 p-4">
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-blue-300">Mã OTP 6 chữ số</label>
+              <input value={registrationOtp} onChange={event => setRegistrationOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className="block w-full rounded-xl border border-blue-800 bg-slate-900 px-4 py-3 text-center font-mono text-lg tracking-[0.5em] text-white" required />
+              {otpPreview && <p className="text-[10px] text-amber-300">Mã thử nghiệm local: {otpPreview}</p>}
+              <p className="text-[10px] text-slate-400">OTP hết hạn sau 10 phút. Sau xác minh, CEO phải duyệt trước khi tài khoản hoạt động.</p>
+            </div> : <>
             {/* Pin Code & Confirm PIN Grid */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="space-y-1">
@@ -726,6 +746,7 @@ export default function LoginScreen({
                 <span className="text-[8px] text-slate-500 block">Nhập lại mật khẩu trên</span>
               </div>
             </div>
+            </>}
 
             {/* Register button */}
             <button
@@ -733,7 +754,7 @@ export default function LoginScreen({
               className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/10 transition-all cursor-pointer mt-2"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Xác nhận Đăng ký tài khoản</span>
+              <span>{registrationRequestId ? 'Xác minh OTP & gửi duyệt' : 'Gửi yêu cầu đăng ký'}</span>
             </button>
           </form>
         )}

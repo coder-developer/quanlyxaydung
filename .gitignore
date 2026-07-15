@@ -8,6 +8,7 @@ release/
 *.log
 .env*
 !.env.example
+.installation-credentials
 .vercel
 
 .env*

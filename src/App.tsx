@@ -278,175 +278,6 @@ export default function App() {
     constructionTasks
   ]);
 
-  // --- CLOUD FIRESTORE DATABASE SYNC ---
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error' | 'offline'>('idle');
-  const [lastSyncedTime, setLastSyncedTime] = useState<string>(() => {
-    return localStorage.getItem('erp_last_synced_time') || 'Chưa đồng bộ';
-  });
-  const [cloudDbSyncEnabled, setCloudDbSyncEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('erp_clouddb_sync_enabled');
-    return saved !== null ? saved === 'true' : false;
-  });
-
-  const handlePushToCloud = useCallback(async () => {
-    setCloudSyncStatus('syncing');
-    try {
-      const { batchSaveCollection, testConnection } = await import('./lib/firestoreSync');
-      const connected = await testConnection();
-      if (!connected) {
-        setCloudSyncStatus('offline');
-        return 'offline';
-      }
-
-      await batchSaveCollection('company_config', [companyConfig], 'companyName');
-      await batchSaveCollection('projects', projects);
-      await batchSaveCollection('employees', employees);
-      await batchSaveCollection('contractors', contractors);
-      await batchSaveCollection('contracts', contracts);
-      await batchSaveCollection('inventory_items', inventoryItems);
-      await batchSaveCollection('material_limits', materialLimits);
-      await batchSaveCollection('inventory_ledger', inventoryLedger);
-      await batchSaveCollection('timesheets', timesheets);
-      await batchSaveCollection('equipment', equipment);
-      await batchSaveCollection('approvals', approvals);
-      await batchSaveCollection('transactions', transactions);
-      await batchSaveCollection('labor_contracts', laborContracts);
-      await batchSaveCollection('construction_tasks', constructionTasks);
-
-      const nowStr = new Date().toLocaleString('vi-VN');
-      setLastSyncedTime(nowStr);
-      localStorage.setItem('erp_last_synced_time', nowStr);
-      setCloudSyncStatus('success');
-      return 'success';
-    } catch (err) {
-      console.error('Error pushing data to Cloud Firestore:', err);
-      setCloudSyncStatus('error');
-      return 'error';
-    }
-  }, [
-    companyConfig, projects, employees, contractors, contracts,
-    inventoryItems, materialLimits, inventoryLedger, timesheets,
-    equipment, approvals, transactions, laborContracts, constructionTasks
-  ]);
-
-  const handlePullFromCloud = useCallback(async () => {
-    setCloudSyncStatus('syncing');
-    try {
-      const { fetchCollection, testConnection } = await import('./lib/firestoreSync');
-      const connected = await testConnection();
-      if (!connected) {
-        setCloudSyncStatus('offline');
-        return 'offline';
-      }
-
-      const cloudCompanyConfig = await fetchCollection('company_config');
-      const cloudProjects = await fetchCollection('projects');
-      const cloudEmployees = await fetchCollection('employees');
-      const cloudContractors = await fetchCollection('contractors');
-      const cloudContracts = await fetchCollection('contracts');
-      const cloudInventoryItems = await fetchCollection('inventory_items');
-      const cloudMaterialLimits = await fetchCollection('material_limits');
-      const cloudInventoryLedger = await fetchCollection('inventory_ledger');
-      const cloudTimesheets = await fetchCollection('timesheets');
-      const cloudEquipment = await fetchCollection('equipment');
-      const cloudApprovals = await fetchCollection('approvals');
-      const cloudTransactions = await fetchCollection('transactions');
-      const cloudLaborContracts = await fetchCollection('labor_contracts');
-      const cloudConstructionTasks = await fetchCollection('construction_tasks');
-
-      if (cloudCompanyConfig.length > 0) setCompanyConfig(cloudCompanyConfig[0]);
-      if (cloudProjects.length > 0) setProjects(cloudProjects);
-      if (cloudEmployees.length > 0) setEmployees(cloudEmployees);
-      if (cloudContractors.length > 0) setContractors(cloudContractors);
-      if (cloudContracts.length > 0) setContracts(cloudContracts);
-      if (cloudInventoryItems.length > 0) setInventoryItems(cloudInventoryItems);
-      if (cloudMaterialLimits.length > 0) setMaterialLimits(cloudMaterialLimits);
-      if (cloudInventoryLedger.length > 0) setInventoryLedger(cloudInventoryLedger);
-      if (cloudTimesheets.length > 0) setTimesheets(cloudTimesheets);
-      if (cloudEquipment.length > 0) setEquipment(cloudEquipment);
-      if (cloudApprovals.length > 0) setApprovals(cloudApprovals);
-      if (cloudTransactions.length > 0) setTransactions(cloudTransactions);
-      if (cloudLaborContracts.length > 0) setLaborContracts(cloudLaborContracts);
-      if (cloudConstructionTasks.length > 0) setConstructionTasks(cloudConstructionTasks);
-
-      const nowStr = new Date().toLocaleString('vi-VN');
-      setLastSyncedTime(nowStr);
-      localStorage.setItem('erp_last_synced_time', nowStr);
-      setCloudSyncStatus('success');
-      return 'success';
-    } catch (err) {
-      console.error('Error pulling data from Cloud Firestore:', err);
-      setCloudSyncStatus('error');
-      return 'error';
-    }
-  }, []);
-
-  // Sync state settings to localStorage
-  useEffect(() => {
-    localStorage.setItem('erp_clouddb_sync_enabled', String(cloudDbSyncEnabled));
-  }, [cloudDbSyncEnabled]);
-
-  // Auto-pull from Cloud Firestore on boot if sync is enabled
-  useEffect(() => {
-    if (cloudDbSyncEnabled) {
-      handlePullFromCloud().then((res) => {
-        if (res === 'success') {
-          console.log('Successfully auto-pulled data from Cloud Firestore on application boot.');
-        }
-      });
-    }
-  }, []);
-
-  // Debounced auto-save to Cloud Firestore (runs 5 seconds after modifications stop)
-  useEffect(() => {
-    if (!cloudDbSyncEnabled) return;
-
-    const timer = setTimeout(() => {
-      setCloudSyncStatus('syncing');
-      import('./lib/firestoreSync').then(async ({ batchSaveCollection, testConnection }) => {
-        const connected = await testConnection();
-        if (!connected) {
-          setCloudSyncStatus('offline');
-          return;
-        }
-        try {
-          await batchSaveCollection('company_config', [companyConfig], 'companyName');
-          await batchSaveCollection('projects', projects);
-          await batchSaveCollection('employees', employees);
-          await batchSaveCollection('contractors', contractors);
-          await batchSaveCollection('contracts', contracts);
-          await batchSaveCollection('inventory_items', inventoryItems);
-          await batchSaveCollection('material_limits', materialLimits);
-          await batchSaveCollection('inventory_ledger', inventoryLedger);
-          await batchSaveCollection('timesheets', timesheets);
-          await batchSaveCollection('equipment', equipment);
-          await batchSaveCollection('approvals', approvals);
-          await batchSaveCollection('transactions', transactions);
-          await batchSaveCollection('labor_contracts', laborContracts);
-          await batchSaveCollection('construction_tasks', constructionTasks);
-
-          const nowStr = new Date().toLocaleString('vi-VN');
-          setLastSyncedTime(nowStr);
-          localStorage.setItem('erp_last_synced_time', nowStr);
-          setCloudSyncStatus('success');
-        } catch (e) {
-          console.error('Background auto-sync failed:', e);
-          setCloudSyncStatus('error');
-        }
-      }).catch((error) => {
-        console.error('Không thể tải mô-đun đồng bộ đám mây:', error);
-        setCloudSyncStatus('error');
-      });
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [
-    cloudDbSyncEnabled,
-    companyConfig, projects, employees, contractors, contracts,
-    inventoryItems, materialLimits, inventoryLedger, timesheets,
-    equipment, approvals, transactions, laborContracts, constructionTasks
-  ]);
-
   // Đồng bộ dữ liệu tập trung khi app chạy cùng backend trên VPS.
   const serverRevision = useRef(0);
   const lastSyncedPayload = useRef('');
@@ -558,6 +389,43 @@ export default function App() {
     const timer = window.setInterval(poll, 5000);
     return () => window.clearInterval(timer);
   }, [serverMode, isLoggedIn, serverReady, erpPayload, applyServerPayload]);
+
+  const resolveServerConflict = useCallback(async (choice: 'server' | 'merge') => {
+    const remote = await fetchServerState<typeof erpPayload>();
+    serverRevision.current = Number(remote.revision);
+    if (choice === 'server') {
+      applyingRemotePayload.current = true;
+      applyServerPayload(remote.payload);
+      setServerSyncStatus('saved');
+      setServerSyncError(null);
+      return;
+    }
+    const mergeRows = <T,>(serverRows: T[] = [], localRows: T[] = [], key: (row: T) => string = row => String((row as { id?: string }).id || '')) => {
+      const rows = new Map(serverRows.map(row => [key(row), row]));
+      for (const row of localRows) rows.set(key(row), row);
+      return [...rows.values()];
+    };
+    const merged = {
+      companyConfig,
+      projects: mergeRows(remote.payload.projects, projects),
+      employees: mergeRows(remote.payload.employees, employees),
+      contractors: mergeRows(remote.payload.contractors, contractors),
+      contracts: mergeRows(remote.payload.contracts, contracts),
+      inventoryItems: mergeRows(remote.payload.inventoryItems, inventoryItems),
+      materialLimits: mergeRows<MaterialLimit>(remote.payload.materialLimits, materialLimits, row => `${row.projectId}:${row.itemId}`),
+      inventoryLedger: mergeRows(remote.payload.inventoryLedger, inventoryLedger),
+      timesheets: mergeRows(remote.payload.timesheets, timesheets),
+      equipment: mergeRows(remote.payload.equipment, equipment),
+      approvals: mergeRows(remote.payload.approvals, approvals),
+      transactions: mergeRows(remote.payload.transactions, transactions),
+      laborContracts: mergeRows(remote.payload.laborContracts, laborContracts),
+      constructionTasks: mergeRows(remote.payload.constructionTasks, constructionTasks),
+    };
+    lastSyncedPayload.current = JSON.stringify(remote.payload);
+    applyServerPayload(merged);
+    setServerSyncStatus('saving');
+    setServerSyncError(null);
+  }, [applyServerPayload, companyConfig, projects, employees, contractors, contracts, inventoryItems, materialLimits, inventoryLedger, timesheets, equipment, approvals, transactions, laborContracts, constructionTasks]);
 
   // Mã nghiệp vụ là khóa chính. Khi mã thay đổi, cập nhật toàn bộ quan hệ liên quan theo một lần đồng bộ.
   useEffect(() => {
@@ -1030,7 +898,11 @@ export default function App() {
     <div className="flex flex-col md:flex-row h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden" id="app-root">
       {serverMode && serverSyncError && (
         <div role="alert" className="fixed z-50 right-4 bottom-4 max-w-md rounded-xl bg-rose-950 px-4 py-3 text-xs font-semibold text-white shadow-2xl">
-          Đồng bộ máy chủ gặp lỗi: {serverSyncError} Dữ liệu vẫn được giữ tạm trên trình duyệt.
+          <div>Đồng bộ máy chủ gặp lỗi: {serverSyncError} Dữ liệu vẫn được giữ tạm trên trình duyệt.</div>
+          {serverSyncStatus === 'conflict' && <div className="mt-3 flex gap-2">
+            <button className="rounded bg-white px-3 py-1.5 font-bold text-rose-950" onClick={() => resolveServerConflict('server').catch(error => setServerSyncError(error.message))}>Tải bản máy chủ</button>
+            <button className="rounded border border-white/40 px-3 py-1.5 font-bold" onClick={() => resolveServerConflict('merge').catch(error => setServerSyncError(error.message))}>Hợp nhất theo mã</button>
+          </div>}
         </div>
       )}
 
@@ -1652,12 +1524,6 @@ export default function App() {
                   onImportBackup={handleImportBackup}
                   onResetData={handleResetDataSecured}
                   userRole={currentUserRole}
-                  cloudSyncStatus={cloudSyncStatus}
-                  lastSyncedTime={lastSyncedTime}
-                  cloudDbSyncEnabled={cloudDbSyncEnabled}
-                  setCloudDbSyncEnabled={setCloudDbSyncEnabled}
-                  onPushToCloud={handlePushToCloud}
-                  onPullFromCloud={handlePullFromCloud}
                 />
               )}
 

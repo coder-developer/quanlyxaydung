@@ -1,6 +1,6 @@
 # Quản lý xây dựng – CONSTRUCT-OS
 
-Ứng dụng quản trị doanh nghiệp xây dựng chạy trên React 19, TypeScript và Vite. App gồm dashboard, nhân sự, chấm công, hợp đồng, kho vật tư, thiết bị, nhật ký kế toán, công nợ, cấu hình doanh nghiệp và tích hợp Google Drive/Firebase tùy chọn.
+Ứng dụng quản trị doanh nghiệp xây dựng chạy trên React 19, TypeScript, Express và PostgreSQL. App gồm dashboard, nhân sự, chấm công, hợp đồng, kho vật tư, thiết bị, nhật ký kế toán, công nợ, cấu hình doanh nghiệp và Google Drive lưu tài liệu. PostgreSQL là nguồn dữ liệu ERP duy nhất.
 
 ## Chạy giao diện trên máy
 
@@ -33,6 +33,16 @@ Nhân viên chưa có tài khoản có thể chọn **Đăng ký tài khoản** 
 
 Bản VPS gồm React, API Node.js và PostgreSQL. Dữ liệu được dùng chung giữa các máy, mật khẩu/PIN được băm bằng bcrypt, phiên đăng nhập dùng JWT 12 giờ và mọi lần đăng nhập/lưu dữ liệu đều có audit log.
 
+### Cài VPS bằng một lệnh
+
+Trên VPS Ubuntu/Debian/RHEL mới, chạy:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/main/install-vps.sh | sudo sh
+```
+
+Trình cài tự cài Docker, tạo bí mật ngẫu nhiên, build container, kiểm tra health và cài lịch backup. Thông tin đăng nhập CEO ban đầu được lưu tại `/opt/quanlyxaydung/.installation-credentials` với quyền chỉ root đọc. Nếu cài từ một nhánh chưa hợp nhất, truyền `REPO_REF` khi chạy trình cài hoặc tải gói ZIP VPS và chạy `sudo sh install-vps.sh` trong thư mục đã giải nén.
+
 Khi một máy thay đổi dữ liệu, app tự lưu sau khoảng 1,5 giây. Các máy khác đang đăng nhập kiểm tra phiên bản máy chủ mỗi 5 giây và tự tải dữ liệu mới nếu không có chỉnh sửa cục bộ chưa lưu. Nếu hai máy sửa cùng lúc, app hiển thị cảnh báo xung đột thay vì âm thầm ghi đè.
 
 ```bash
@@ -53,6 +63,25 @@ sh scripts/backup.sh
 
 Có thể thêm lệnh trên vào cron hằng đêm. Volume `postgres_data` giữ dữ liệu khi container hoặc VPS app khởi động lại; file backup cần được sao chép sang một máy hoặc object storage khác.
 
+Thiết lập `BACKUP_REMOTE` theo remote rclone rồi cài lịch tự động:
+
+```sh
+sh scripts/install-backup-cron.sh
+sh scripts/restore-drill.sh
+```
+
+Cron chạy backup lúc 02:15 hằng ngày và diễn tập khôi phục vào Chủ nhật. OTP đăng ký cần cấu hình `OTP_WEBHOOK_URL` và `OTP_WEBHOOK_TOKEN`; nếu production chưa có kênh gửi OTP, đăng ký tự phục vụ sẽ đóng an toàn và CEO vẫn có thể tạo tài khoản.
+
+## Kiểm thử
+
+```sh
+npm run check
+ALLOW_TEST_MUTATIONS=true TEST_BASE_URL=http://127.0.0.1:18080 npm run test:api
+E2E_BASE_URL=http://127.0.0.1:18080 E2E_CEO_PIN=... npm run test:e2e
+```
+
+Chỉ chạy `test:api` trên database test riêng vì bộ test cố ý tạo và xóa dữ liệu kiểm thử.
+
 ## Kiểm tra và đóng gói
 
 ```bash
@@ -66,5 +95,5 @@ Bản production nằm trong `dist/` và có thể triển khai lên Vercel, Net
 
 - Khi `VITE_USE_SERVER=true`, PostgreSQL là nguồn dữ liệu dùng chung và localStorage chỉ là bản dự phòng khi mất mạng.
 - Khi chạy riêng `npm run dev` mà không bật server mode, localStorage phù hợp cho demo hoặc một người dùng trên một trình duyệt.
-- Firebase/Google Drive cần cấu hình dự án, OAuth và Security Rules riêng.
+- Google Drive cần cấu hình Firebase Authentication/OAuth riêng; Firestore không được dùng làm cơ sở dữ liệu ERP.
 - Luôn xuất bản sao lưu trước khi xóa dữ liệu hoặc chuyển máy.

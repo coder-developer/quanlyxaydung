@@ -82,11 +82,11 @@ export default function FlowSimulator() {
       tablesAffected: ['timesheets (check_in_time = Now(), latitude, longitude)']
     },
     {
-      title: 'Bước 2: Hàng Rào Địa Lý & AI Quét Mặt',
-      actor: 'Hệ thống (Geofencing & AI)',
-      desc: 'Máy chủ tính khoảng cách từ tọa độ thiết bị đến tâm dự án và đối chiếu bán kính geofence. Ảnh chấm công được lưu khi nhân viên đã đồng ý sử dụng.',
+      title: 'Bước 2: Hàng Rào Địa Lý & Ảnh Xác Minh',
+      actor: 'Hệ thống (Geofencing)',
+      desc: 'Máy chủ tính khoảng cách từ tọa độ thiết bị đến tâm dự án. Ảnh chỉ là bằng chứng đối chiếu thủ công, không phải nhận diện khuôn mặt hoặc liveness.',
       icon: <MapPin className="w-6 h-6 text-rose-600" />,
-      tablesAffected: ['timesheets (gps_status, verified_by_face = True/False)']
+      tablesAffected: ['timesheets (gps_status, attendance_photo)']
     },
     {
       title: 'Bước 3: Ghi Nhận Bảng Công Ngày',

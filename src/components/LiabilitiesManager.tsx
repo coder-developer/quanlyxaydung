@@ -6,6 +6,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, Contractor, Contract, FinancialTransaction, CompanyConfig, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
+import { createOperation, deleteOperation, listOperations } from '../lib/api';
+import { subscribeRealtime } from '../lib/realtime';
 import {
   FileSpreadsheet,
   Plus,
@@ -55,6 +57,8 @@ export interface AccountingVoucher {
   exchangeRateDetail: string; // Tỷ giá ngoại tệ (vàng bạc, đá quý)
   convertedAmount: string; // Số tiền quy đổi
   projectRelated?: string; // Tên dự án liên quan (để hiển thị)
+  projectId?: string;
+  rowVersion?: number;
 }
 
 export function convertNumberToVietnameseWords(amount: number): string {
@@ -141,14 +145,6 @@ interface Client {
   officeAddress?: string;
 }
 
-const SEEDED_CLIENTS: Client[] = [
-  { id: 'client-gr', name: 'Tập đoàn BĐS Sông Xanh', contactPerson: 'Nguyễn Văn Hải', phone: '0905.111.222', email: 'contact@songxanhland.vn' },
-  { id: 'client-sg-gt', name: 'Sở Giao thông Vận tải TP.HCM', contactPerson: 'Phòng QLDA 1', phone: '028.3829.1422', email: 'sgtvt@tphcm.gov.vn' },
-  { id: 'client-techhub', name: 'Công ty CP Đầu tư TechHub', contactPerson: 'Lê Minh Trí', phone: '0918.444.555', email: 'tri.lm@techhubtower.com' },
-  { id: 'client-ecoland', name: 'Tập đoàn Địa ốc EcoLand', contactPerson: 'Phạm Hoàng Nam', phone: '0982.555.777', email: 'info@ecoland.com.vn' },
-  { id: 'client-vinasemi', name: 'Tập đoàn Công nghệ VinaSemi', contactPerson: 'Trần Anh Tuấn', phone: '0903.666.888', email: 'tuan.ta@vinasemi.vn' }
-];
-
 export default function LiabilitiesManager({
   projects,
   contractors: partnerRecords,
@@ -163,85 +159,13 @@ export default function LiabilitiesManager({
 }: LiabilitiesManagerProps) {
   const contractors = useMemo(() => partnerRecords.filter(item => item.type !== 'Client'), [partnerRecords]);
   const clients = useMemo<Client[]>(() => {
-    const persisted = partnerRecords.filter(item => item.type === 'Client');
-    const persistedIds = new Set(persisted.map(item => item.id));
-    return [...SEEDED_CLIENTS.filter(item => !persistedIds.has(item.id)), ...persisted];
+    return partnerRecords.filter(item => item.type === 'Client');
   }, [partnerRecords]);
   // --- SUB-TABS within Liabilities Manager ---
   const [subTab, setSubTab] = useState<'clients' | 'subcontractors' | 'partners' | 'vouchers'>('clients');
 
   // --- ACCOUNTING VOUCHERS STATE ---
-  const [vouchersList, setVouchersList] = useState<AccountingVoucher[]>([
-    {
-      id: 'PT-001',
-      type: 'Receipt',
-      templateType: 'Thông tư 200/2014/TT-BTC',
-      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
-      bookNo: 'Q-01',
-      voucherNo: 'PT-001',
-      debitAccount: '1111 (Tiền mặt)',
-      creditAccount: '131 (Phải thu KH)',
-      date: '2026-07-08',
-      personName: 'Nguyễn Văn Hải',
-      personAddress: 'Đại diện Tập đoàn BĐS Sông Xanh',
-      reason: 'Thu hồi tạm ứng đợt 1 khởi công HĐ HD-CDT-GREENRIVER',
-      amount: 15000000000,
-      amountWords: 'Mười lăm tỷ đồng',
-      attachmentsCount: '02',
-      attachmentsDetail: 'Hồ sơ nghiệm thu đợt 1 & Hóa đơn GTGT số 00452',
-      receivedWords: 'Mười lăm tỷ đồng',
-      exchangeRateDetail: 'Không có',
-      convertedAmount: '15.000.000.000 ₫',
-      projectRelated: 'Chung cư cao cấp Green River'
-    },
-    {
-      id: 'PC-001',
-      type: 'Payment',
-      templateType: 'Thông tư 99/2025/TT-BTC',
-      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
-      bookNo: 'Q-01',
-      voucherNo: 'PC-001',
-      debitAccount: '331 (Phải trả NCC)',
-      creditAccount: '1111 (Tiền mặt)',
-      date: '2026-07-08',
-      personName: 'Hoàng Thị Thảo',
-      personAddress: 'Đại diện Nhà phân phối Sắt Thép Việt',
-      reason: 'Thanh toán tiền mua sắt thép dầm mố M1',
-      amount: 450000000,
-      amountWords: 'Bốn trăm năm mươi triệu đồng',
-      attachmentsCount: '01',
-      attachmentsDetail: 'Biên bản nghiệm thu bàn giao vật tư thép',
-      receivedWords: 'Bốn trăm năm mươi triệu đồng',
-      exchangeRateDetail: 'Không có',
-      convertedAmount: '450.000.000 ₫',
-      projectRelated: 'Cầu vượt nút giao Tân Sơn Nhất'
-    },
-    {
-      id: 'PT-002',
-      type: 'Receipt',
-      templateType: 'Thông tư 200/2014/TT-BTC',
-      unitName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      unitAddress: 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh',
-      bookNo: 'Q-01',
-      voucherNo: 'PT-002',
-      debitAccount: '1111 (Tiền mặt)',
-      creditAccount: '131 (Phải thu KH)',
-      date: '2026-07-05',
-      personName: 'Lê Minh Trí',
-      personAddress: 'Đại diện Công ty CP Đầu tư TechHub',
-      reason: 'Thu hồi công nợ nghiệm thu khối lượng dầm sàn tầng 5',
-      amount: 1200000000,
-      amountWords: 'Một tỷ hai trăm triệu đồng',
-      attachmentsCount: '03',
-      attachmentsDetail: 'Biên bản nghiệm thu khối lượng & Đề nghị thanh toán',
-      receivedWords: 'Một tỷ hai trăm triệu đồng',
-      exchangeRateDetail: 'Không có',
-      convertedAmount: '1.200.000.000 ₫',
-      projectRelated: 'Tòa nhà văn phòng TechHub Tower'
-    }
-  ]);
+  const [vouchersList, setVouchersList] = useState<AccountingVoucher[]>([]);
 
   const [selectedVoucher, setSelectedVoucher] = useState<AccountingVoucher | null>(null);
   const [showCreateVoucherModal, setShowCreateVoucherModal] = useState(false);
@@ -257,10 +181,18 @@ export default function LiabilitiesManager({
       setNewVoucherUnitName(companyConfig.companyName);
       const officeAddress = companyConfig.officeAddress || companyConfig.siteOffice;
       setNewVoucherUnitAddress(officeAddress);
-      setVouchersList(items => items.map(item => ({ ...item, unitName: companyConfig.companyName, unitAddress: officeAddress })));
-      setSelectedVoucher(item => item ? ({ ...item, unitName: companyConfig.companyName, unitAddress: officeAddress }) : item);
     }
   }, [companyConfig]);
+
+  const loadVouchers = React.useCallback(async () => {
+    const rows = await listOperations<AccountingVoucher>('vouchers');
+    setVouchersList(rows);
+    setSelectedVoucher(current => rows.find(row => row.id === current?.id) || rows[0] || null);
+  }, []);
+  useEffect(() => {
+    loadVouchers().catch(error => showToast(error instanceof Error ? error.message : 'Không tải được phiếu thu chi.'));
+    return subscribeRealtime(['operations'], () => { loadVouchers().catch(() => undefined); });
+  }, [loadVouchers]);
   const [newVoucherBookNo, setNewVoucherBookNo] = useState<string>('Q-01');
   const [newVoucherNo, setNewVoucherNo] = useState<string>('');
   const [newVoucherDebit, setNewVoucherDebit] = useState<string>('1111 (Tiền mặt)');
@@ -1170,7 +1102,7 @@ export default function LiabilitiesManager({
     showToast(`Đã tải xuống file Word thành công cho ${v.type === 'Receipt' ? 'Phiếu Thu' : 'Phiếu Chi'}!`);
   };
 
-  const handleSaveNewVoucher = (e: React.FormEvent) => {
+  const handleSaveNewVoucher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVoucherNo || !newVoucherPersonName || newVoucherAmount <= 0 || !newVoucherReason) {
       alert('Vui lòng điền đầy đủ các thông tin cần thiết: Số phiếu, Người nộp/nhận, Số tiền và Lý do!');
@@ -1198,27 +1130,17 @@ export default function LiabilitiesManager({
       receivedWords: newVoucherAmountWords || convertNumberToVietnameseWords(newVoucherAmount),
       exchangeRateDetail: newVoucherExchangeRate || 'Không có',
       convertedAmount: newVoucherConvertedAmount || (newVoucherAmount.toLocaleString('vi-VN') + ' ₫'),
-      projectRelated: newVoucherProject || 'Chi phí chung'
+      projectRelated: newVoucherProject || 'Chi phí chung',
+      projectId: projects.find(project => project.name === newVoucherProject)?.id,
     };
 
-    setVouchersList(prev => [createdVoucher, ...prev]);
-    setSelectedVoucher(createdVoucher);
+    let savedVoucher: AccountingVoucher;
+    try { savedVoucher = await createOperation<AccountingVoucher>('vouchers', createdVoucher); }
+    catch (error) { showToast(error instanceof Error ? error.message : 'Không lưu được chứng từ.'); return; }
+    setVouchersList(prev => [savedVoucher, ...prev]);
+    setSelectedVoucher(savedVoucher);
     setShowCreateVoucherModal(false);
     showToast(`Đã lập thành công ${newVoucherType === 'Receipt' ? 'Phiếu Thu' : 'Phiếu Chi'} số ${newVoucherNo}!`);
-
-    // Optionally write to central transactions
-    const isRevenue = newVoucherType === 'Receipt';
-    const tx: FinancialTransaction = {
-      id: `tx-vou-${Date.now()}`,
-      projectId: 'proj-1', // Default to proj-1 or matching project
-      type: isRevenue ? 'Revenue' : 'Expense',
-      category: isRevenue ? 'Client_Billing' : 'Overhead',
-      amount: newVoucherAmount,
-      description: `${newVoucherType === 'Receipt' ? 'Thu' : 'Chi'} theo phiếu số ${newVoucherNo}: ${newVoucherReason}`,
-      date: newVoucherDate,
-      referenceId: newVoucherNo
-    };
-    setTransactions(prev => [tx, ...prev]);
 
     // Reset Form states
     setNewVoucherNo('');
@@ -1230,8 +1152,12 @@ export default function LiabilitiesManager({
     setNewVoucherAttachmentsDetail('');
   };
 
-  const handleDeleteVoucher = (id: string) => {
+  const handleDeleteVoucher = async (id: string) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa chứng từ số ${id}?`)) {
+      const voucher = vouchersList.find(item => item.id === id);
+      if (!voucher) return;
+      try { await deleteOperation('vouchers', voucher); }
+      catch (error) { showToast(error instanceof Error ? error.message : 'Không xóa được chứng từ.'); return; }
       setVouchersList(prev => prev.filter(v => v.id !== id));
       if (selectedVoucher?.id === id) {
         setSelectedVoucher(null);

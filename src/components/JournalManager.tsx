@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Project, FinancialTransaction, InventoryLedger, Timesheet, Equipment, CompanyConfig, UserRole } from '../types';
 import {
   BookOpen, Search, Filter, Calendar, PlusCircle, ArrowUpDown,
   Download, RefreshCw, FileSpreadsheet, CheckCircle2, TrendingUp,
   TrendingDown, Coins, AlertCircle
 } from 'lucide-react';
+import { createOperation, listOperations } from '../lib/api';
+import { subscribeRealtime } from '../lib/realtime';
 
 // Vietnamese Standard Chart of Accounts (Hệ thống tài khoản Thông tư 200)
 export const CHART_OF_ACCOUNTS: Record<string, string> = {
@@ -38,6 +40,8 @@ export interface JournalRow {
   projectName?: string; // Tên công trình
   sourceModule: 'Warehouse' | 'HR' | 'Liabilities' | 'Equipment' | 'Manual';
   referenceId?: string;
+  projectId?: string;
+  rowVersion?: number;
 }
 
 interface JournalManagerProps {
@@ -66,33 +70,7 @@ export default function JournalManager({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Manual extra journal entries state to support adding direct double-entries
-  const [manualEntries, setManualEntries] = useState<JournalRow[]>([
-    {
-      id: 'me-1',
-      postingDate: '2026-07-01',
-      voucherNo: 'PKH-001',
-      voucherDate: '2026-07-01',
-      description: 'Khấu hao định kỳ tháng 6 máy xúc Komatsu PC200',
-      debitAccount: '627',
-      creditAccount: '2141',
-      amount: 4500000,
-      projectName: 'Chung cư cao cấp Green River',
-      sourceModule: 'Equipment',
-    },
-    {
-      id: 'me-2',
-      postingDate: '2026-07-02',
-      voucherNo: 'PC-088',
-      voucherDate: '2026-07-02',
-      description: 'Mua bổ sung 10 bộ đàm cầm tay Kenwood cho ban chỉ huy',
-      debitAccount: '153',
-      creditAccount: '1111',
-      amount: 6500000,
-      projectName: 'Cầu vượt nút giao Tân Sơn Nhất',
-      sourceModule: 'Equipment',
-    }
-  ]);
+  const [manualEntries, setManualEntries] = useState<JournalRow[]>([]);
 
   // Form states for manual double entry modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -110,6 +88,12 @@ export default function JournalManager({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const loadJournal = useCallback(async () => setManualEntries(await listOperations<JournalRow>('journal')), []);
+  useEffect(() => {
+    loadJournal().catch(error => showToast(error instanceof Error ? error.message : 'Không tải được bút toán PostgreSQL.'));
+    return subscribeRealtime(['operations'], () => { loadJournal().catch(() => undefined); });
+  }, [loadJournal]);
 
   // 1. Auto-generate accounting journal entries dynamically from central business transactions!
   // This maintains absolute single source of truth (ACID Compliance)
@@ -223,10 +207,10 @@ export default function JournalManager({
   }, [transactions, inventoryLedger, manualEntries, projects]);
 
   // Handle saving direct manual accounting entry (Bút toán kép)
-  const handleSaveManualEntry = (e: React.FormEvent) => {
+  const handleSaveManualEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVoucherNo || !newDescription || newAmount <= 0) {
-      alert('Vui lòng điền đầy đủ Số chứng từ, Diễn giải và Số tiền lớn hơn 0!');
+    if (!newVoucherNo || !newDescription || !newProject || newAmount <= 0) {
+      alert('Vui lòng chọn dự án và điền đầy đủ Số chứng từ, Diễn giải, Số tiền lớn hơn 0!');
       return;
     }
 
@@ -241,32 +225,14 @@ export default function JournalManager({
       creditAccount: newCreditAcc,
       amount: newAmount,
       projectName: newProject || 'Chi phí dùng chung',
+      projectId: projects.find(project => project.name === newProject)?.id,
       sourceModule: 'Manual',
     };
 
-    // Add to journal entries list
-    setManualEntries(prev => [newRow, ...prev]);
-
-    // Integrate with central transactions to update P&L dashboard dynamically!
-    // If we debit an expense account (621, 622, 627, 642), write as central "Expense"
-    // If we credit 511, write as central "Revenue"
-    const isExpense = ['621', '622', '627', '642'].includes(newDebitAcc);
-    const isRevenue = newCreditAcc === '511';
-
-    if (isExpense || isRevenue) {
-      const matchProjObj = projects.find(p => p.name === newProject);
-      const newTx: FinancialTransaction = {
-        id: `tx-me-${Date.now()}`,
-        projectId: matchProjObj ? matchProjObj.id : 'proj-1', // Fallback
-        type: isRevenue ? 'Revenue' : 'Expense',
-        category: newDebitAcc === '621' ? 'Material' : (newDebitAcc === '622' ? 'Labor' : (newDebitAcc === '627' ? 'Equipment' : 'Overhead')),
-        amount: newAmount,
-        description: `Bút toán ${newVoucherNo}: ${newDescription}`,
-        date: newPostingDate,
-        referenceId: newVoucherNo
-      };
-      setTransactions(prev => [newTx, ...prev]);
-    }
+    try {
+      const saved = await createOperation<JournalRow>('journal', newRow);
+      setManualEntries(prev => [saved, ...prev]);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Không lưu được bút toán.'); return; }
 
     setShowAddModal(false);
     showToast(`Đã hạch toán thành công bút toán kép ${newVoucherNo}!`);

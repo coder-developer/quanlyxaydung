@@ -17,13 +17,6 @@ interface CompanyConfigViewProps {
   onExportBackup: () => void;
   onResetData: () => void;
   userRole?: UserRole;
-
-  cloudSyncStatus?: 'idle' | 'syncing' | 'success' | 'error' | 'offline';
-  lastSyncedTime?: string;
-  cloudDbSyncEnabled?: boolean;
-  setCloudDbSyncEnabled?: (enabled: boolean) => void;
-  onPushToCloud?: () => Promise<string>;
-  onPullFromCloud?: () => Promise<string>;
 }
 
 export default function CompanyConfigView({
@@ -34,13 +27,7 @@ export default function CompanyConfigView({
   onImportBackup,
   onExportBackup,
   onResetData,
-  userRole,
-  cloudSyncStatus = 'idle',
-  lastSyncedTime = 'Chưa đồng bộ',
-  cloudDbSyncEnabled = false,
-  setCloudDbSyncEnabled,
-  onPushToCloud,
-  onPullFromCloud
+  userRole
 }: CompanyConfigViewProps) {
   // Local state to manage edits before saving
   const [formConfig, setFormConfig] = useState<CompanyConfig>({
@@ -723,122 +710,17 @@ export default function CompanyConfigView({
             </div>
           </div>
 
-          {/* Cloud Firestore Database Sync Box */}
+          {/* PostgreSQL is the single source of truth. Google Drive only stores documents. */}
           <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-md p-6 text-white space-y-5">
             <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-              <Cloud className="w-5 h-5 text-blue-400" />
+              <Database className="w-5 h-5 text-emerald-400" />
               <div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-blue-400">Đấu nối Cloud Database (Firestore)</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Đồng bộ và ghi dữ liệu ổn định khi triển khai lên Vercel</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Cơ sở dữ liệu PostgreSQL tập trung</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Nguồn dữ liệu nghiệp vụ duy nhất cho mọi tài khoản và thiết bị</p>
               </div>
             </div>
-
-            {/* Cloud Auto Save Toggle */}
-            <div className="bg-slate-950/60 p-4 rounded-lg border border-slate-800/80 flex items-center justify-between gap-4">
-              <div className="space-y-1">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider block text-slate-200">
-                  Tự động đồng bộ với Cloud
-                </span>
-                <p className="text-[9.5px] text-slate-400 leading-normal">
-                  Mọi chỉnh sửa dữ liệu sẽ được tự động đồng bộ ngầm lên Cloud Firestore (sau 5 giây dừng thao tác) để đảm bảo ổn định và an toàn.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setCloudDbSyncEnabled && setCloudDbSyncEnabled(!cloudDbSyncEnabled)}
-                className="text-blue-400 hover:text-blue-300 transition-colors shrink-0 animate-fade-in"
-              >
-                {cloudDbSyncEnabled ? (
-                  <ToggleRight className="w-12 h-12 text-blue-500" />
-                ) : (
-                  <ToggleLeft className="w-12 h-12 text-slate-600" />
-                )}
-              </button>
-            </div>
-
-            {/* Connection Status and Last Synced */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[10px] font-mono bg-slate-950 px-3 py-2 rounded border border-slate-850">
-                <span className="text-slate-400">TRẠNG THÁI KẾT NỐI:</span>
-                <span className={`font-bold flex items-center gap-1 ${
-                  cloudSyncStatus === 'syncing' ? 'text-blue-400 animate-pulse' :
-                  cloudSyncStatus === 'success' ? 'text-emerald-400' :
-                  cloudSyncStatus === 'error' ? 'text-rose-400' :
-                  cloudSyncStatus === 'offline' ? 'text-amber-400' :
-                  'text-slate-400'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full bg-current ${cloudSyncStatus === 'syncing' ? 'animate-ping' : ''}`}></span>
-                  {cloudSyncStatus === 'syncing' ? 'ĐANG ĐỒNG BỘ...' :
-                   cloudSyncStatus === 'success' ? 'ĐÃ ĐỒNG BỘ THÀNH CÔNG' :
-                   cloudSyncStatus === 'error' ? 'LỖI KẾT NỐI' :
-                   cloudSyncStatus === 'offline' ? 'OFFLINE / KHÔNG ĐƯỜNG TRUYỀN' :
-                   'ONLINE - SẴN SÀNG'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] font-mono bg-slate-950 px-3 py-2 rounded border border-slate-850">
-                <span className="text-slate-400 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  ĐỒNG BỘ GẦN NHẤT:
-                </span>
-                <span className="font-bold text-slate-300">{lastSyncedTime}</span>
-              </div>
-            </div>
-
-            {/* Manual Sync Actions */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (onPushToCloud) {
-                    const res = await onPushToCloud();
-                    if (res === 'success') {
-                      showToast('Đã đẩy toàn bộ dữ liệu hiện tại lên Cloud Firestore!', 'success');
-                    } else if (res === 'offline') {
-                      showToast('Lỗi: Không tìm thấy kết nối mạng hoặc Firestore bị chặn.', 'error');
-                    } else {
-                      showToast('Đồng bộ lên Cloud thất bại. Vui lòng kiểm tra lại.', 'error');
-                    }
-                  }
-                }}
-                disabled={cloudSyncStatus === 'syncing'}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold uppercase transition-all shadow disabled:opacity-50 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Đẩy lên Cloud</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (window.confirm('CẢNH BÁO: Hành động này sẽ tải toàn bộ dữ liệu từ Cloud Firestore về máy và GHI ĐÈ dữ liệu hiện tại trên trình duyệt. Bạn có chắc chắn muốn tiếp tục?')) {
-                    if (onPullFromCloud) {
-                      const res = await onPullFromCloud();
-                      if (res === 'success') {
-                        showToast('Đã tải và cập nhật toàn bộ dữ liệu từ Cloud Firestore thành công!', 'success');
-                      } else if (res === 'offline') {
-                        showToast('Lỗi: Thiết bị ngoại tuyến hoặc bị chặn kết nối.', 'error');
-                      } else {
-                        showToast('Tải dữ liệu thất bại. Cơ sở dữ liệu Cloud có thể đang trống.', 'error');
-                      }
-                    }
-                  }
-                }}
-                disabled={cloudSyncStatus === 'syncing'}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold uppercase border border-slate-700 transition-all disabled:opacity-50 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Tải từ Cloud</span>
-              </button>
-            </div>
-
-            {/* Security Warning */}
-            <div className="pt-3 border-t border-slate-800 flex gap-2 items-start text-slate-400 text-[10px] leading-relaxed">
-              <Lock className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-              <span>
-                <strong>Bảo mật & Ổn định:</strong> Kết nối trực tiếp được bảo vệ bằng Firebase Security Rules. Thích hợp chạy ổn định lâu dài khi deploy lên môi trường Serverless của Vercel mà không bị mất mát dữ liệu.
-              </span>
+            <div className="bg-slate-950/60 p-4 rounded-lg border border-slate-800/80 text-[10px] leading-relaxed text-slate-300">
+              Dữ liệu thay đổi được kiểm soát phiên bản, ghi audit log và đồng bộ qua API máy chủ. Google Drive chỉ dùng lưu tệp tài liệu, không ghi dữ liệu ERP.
             </div>
           </div>
 

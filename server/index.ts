@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import express from 'express';
 import helmet from 'helmet';
@@ -107,6 +107,72 @@ const roleForEmployee = (employee: EmployeeAccountSource): Role => isSiteManager
 async function loadErpPayload() {
   const result = await pool.query('SELECT payload FROM erp_state WHERE id=1');
   return (result.rows[0]?.payload || {}) as JsonRecord;
+}
+
+async function syncRegistries(client: PoolClient, payload: JsonRecord) {
+  const projects = Array.isArray(payload.projects) ? payload.projects : [];
+  const equipment = Array.isArray(payload.equipment) ? payload.equipment : [];
+  for (const project of projects) {
+    const id = String(project.id || '').trim();
+    if (!id) continue;
+    await client.query(
+      `INSERT INTO project_registry(id,name,active,updated_at) VALUES($1,$2,TRUE,NOW())
+       ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,active=TRUE,updated_at=NOW()`,
+      [id, String(project.name || id).slice(0, 250)],
+    );
+  }
+  if (projects.length) await client.query('UPDATE project_registry SET active=FALSE,updated_at=NOW() WHERE id<>ALL($1::text[])', [projects.map((item: JsonRecord) => String(item.id))]);
+  else await client.query('UPDATE project_registry SET active=FALSE,updated_at=NOW()');
+  for (const item of equipment) {
+    const id = String(item.id || '').trim();
+    if (!id) continue;
+    const projectId = projects.some((project: JsonRecord) => String(project.id) === String(item.currentProjectId)) ? String(item.currentProjectId) : null;
+    await client.query(
+      `INSERT INTO equipment_registry(id,name,project_id,active,updated_at) VALUES($1,$2,$3,TRUE,NOW())
+       ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,project_id=EXCLUDED.project_id,active=TRUE,updated_at=NOW()`,
+      [id, String(item.name || id).slice(0, 250), projectId],
+    );
+  }
+  const equipmentIds = equipment.map((item: JsonRecord) => String(item.id));
+  await client.query(
+    `DELETE FROM journal_entries journal WHERE
+       (journal.payload->>'sourceResource'='fuel' AND EXISTS (SELECT 1 FROM equipment_fuel_logs item WHERE item.id=journal.payload->>'sourceRecordId' AND ($1::text[] IS NULL OR item.equipment_id<>ALL($1::text[])))) OR
+       (journal.payload->>'sourceResource'='maintenance' AND EXISTS (SELECT 1 FROM equipment_maintenance_logs item WHERE item.id=journal.payload->>'sourceRecordId' AND ($1::text[] IS NULL OR item.equipment_id<>ALL($1::text[])))) OR
+       (journal.payload->>'sourceResource'='dispatches' AND EXISTS (SELECT 1 FROM equipment_dispatches item WHERE item.id=journal.payload->>'sourceRecordId' AND ($1::text[] IS NULL OR item.equipment_id<>ALL($1::text[]))))`,
+    [equipmentIds.length ? equipmentIds : null],
+  );
+  if (equipmentIds.length) await client.query('DELETE FROM equipment_registry WHERE id<>ALL($1::text[])', [equipmentIds]);
+  else await client.query('DELETE FROM equipment_registry');
+}
+
+const OPERATION_RESOURCES = {
+  vouchers: { table: 'accounting_vouchers', date: 'voucher_date', project: 'project_id', roles: ['CEO', 'ChiefAccountant'] as Role[] },
+  journal: { table: 'journal_entries', date: 'posting_date', project: 'project_id', roles: ['CEO', 'ChiefAccountant'] as Role[] },
+  fuel: { table: 'equipment_fuel_logs', date: 'log_date', project: 'project_id', roles: ['CEO', 'ChiefAccountant', 'SiteAccountant', 'SiteManager'] as Role[] },
+  maintenance: { table: 'equipment_maintenance_logs', date: 'log_date', project: 'project_id', roles: ['CEO', 'ChiefAccountant', 'SiteAccountant', 'SiteManager'] as Role[] },
+  dispatches: { table: 'equipment_dispatches', date: 'dispatch_date', project: 'to_project_id', roles: ['CEO', 'SiteAccountant', 'SiteManager'] as Role[] },
+} as const;
+type OperationResource = keyof typeof OPERATION_RESOURCES;
+const isOperationResource = (value: string): value is OperationResource => value in OPERATION_RESOURCES;
+
+function operationRow(row: JsonRecord) {
+  const payload = row.payload && typeof row.payload === 'object' ? row.payload : {};
+  return {
+    ...payload,
+    id: row.id,
+    rowVersion: Number(row.row_version),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function operationProjectScope(user: SessionUser) {
+  if (!['SiteManager', 'SiteAccountant'].includes(user.role)) return null;
+  return [...projectScopeForUser(user, await loadErpPayload())];
+}
+
+async function auditOperation(client: PoolClient, userId: number, action: string, resource: string, id: string, metadata: JsonRecord = {}) {
+  await client.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [userId, action, { resource, id, ...metadata }]);
 }
 
 function projectScopeForUser(user: SessionUser, payload: JsonRecord) {
@@ -339,7 +405,21 @@ async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
 
 app.set('trust proxy', 1);
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://lh3.googleusercontent.com'],
+      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'https://*.googleapis.com', 'https://securetoken.googleapis.com', 'https://identitytoolkit.googleapis.com', 'https://accounts.google.com'],
+      frameSrc: ['https://accounts.google.com'],
+    },
+  },
   frameguard: { action: 'deny' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
@@ -480,18 +560,52 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   );
   if (!employee) return res.status(404).json({ error: 'Không tìm thấy hồ sơ nhân viên khớp mã và số điện thoại.' });
   const linkedEmployeeId = normalizeEmployeeId(employee.code || employee.id);
-  const linked = await pool.query('SELECT 1 FROM app_users WHERE UPPER(employee_id)=$1', [linkedEmployeeId]);
+  const linked = await pool.query('SELECT 1 FROM app_users WHERE UPPER(employee_id)=$1 OR username=$2', [linkedEmployeeId, username]);
   if (linked.rowCount) return res.status(409).json({ error: 'Hồ sơ nhân viên này đã có tài khoản.' });
+  const otp = String(randomInt(100000, 1_000_000));
+  const requestId = randomUUID();
   try {
-    const role = roleForEmployee(employee);
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin,session_version', [username, employee.name, role, await bcrypt.hash(pin, 12), linkedEmployeeId]);
-    const row = result.rows[0];
-    const user: SessionUser = { id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id, mustChangePassword: false, sessionVersion: Number(row.session_version) };
-    await publishRealtimeEvent('accounts', 'account_registered');
-    res.status(201).json({ token: sign(user), user });
+    await pool.query(
+      `INSERT INTO registration_requests(id,username,employee_id,phone,pin_hash,otp_hash,otp_expires_at)
+       VALUES($1,$2,$3,$4,$5,$6,NOW()+INTERVAL '10 minutes')`,
+      [requestId, username, linkedEmployeeId, phone, await bcrypt.hash(pin, 12), await bcrypt.hash(otp, 10)],
+    );
+    const webhook = process.env.OTP_WEBHOOK_URL;
+    if (webhook) {
+      const response = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.OTP_WEBHOOK_TOKEN ? { Authorization: `Bearer ${process.env.OTP_WEBHOOK_TOKEN}` } : {}) }, body: JSON.stringify({ phone, message: `Ma xac minh Quan tri doanh nghiep: ${otp}. Het han sau 10 phut.` }) });
+      if (!response.ok) throw new Error('OTP_DELIVERY_FAILED');
+    } else if (process.env.NODE_ENV === 'production') {
+      await pool.query('DELETE FROM registration_requests WHERE id=$1', [requestId]);
+      return res.status(503).json({ error: 'Kênh gửi OTP chưa được cấu hình. Vui lòng liên hệ CEO tạo tài khoản.' });
+    }
+    await publishRealtimeEvent('accounts', 'registration_otp_requested');
+    res.status(202).json({ requestId, status: 'otp_pending', ...(process.env.NODE_ENV !== 'production' ? { otpPreview: otp } : {}) });
   } catch (error: any) {
-    res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không đăng ký được tài khoản.' });
+    await pool.query('DELETE FROM registration_requests WHERE id=$1', [requestId]);
+    res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Đã có yêu cầu đăng ký đang chờ xử lý.' : 'Không gửi được OTP đăng ký.' });
   }
+});
+
+app.post('/api/auth/register/verify', authLimiter, async (req, res) => {
+  const requestId = String(req.body.requestId || '');
+  const otp = String(req.body.otp || '');
+  if (!/^[0-9a-f-]{36}$/i.test(requestId) || !/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'Mã xác minh không hợp lệ.' });
+  const result = await pool.query('SELECT * FROM registration_requests WHERE id=$1 AND status=\'otp_pending\'', [requestId]);
+  const row = result.rows[0];
+  if (!row || new Date(row.otp_expires_at).getTime() < Date.now() || Number(row.otp_attempts) >= 5) {
+    if (row) await pool.query("UPDATE registration_requests SET status='expired' WHERE id=$1", [requestId]);
+    return res.status(410).json({ error: 'Yêu cầu OTP đã hết hạn. Vui lòng đăng ký lại.' });
+  }
+  if (!(await bcrypt.compare(otp, row.otp_hash))) {
+    await pool.query('UPDATE registration_requests SET otp_attempts=otp_attempts+1 WHERE id=$1', [requestId]);
+    return res.status(401).json({ error: 'Mã OTP không đúng.' });
+  }
+  await pool.query("UPDATE registration_requests SET status='pending_approval',otp_verified_at=NOW() WHERE id=$1", [requestId]);
+  const ceos = await pool.query("SELECT id FROM app_users WHERE role='CEO' AND active=TRUE");
+  for (const ceo of ceos.rows) await pool.query("INSERT INTO notifications(id,user_id,title,message,category) VALUES($1,$2,$3,$4,'account')", [randomUUID(), ceo.id, 'Yêu cầu đăng ký tài khoản', `Nhân viên ${row.employee_id} đang chờ CEO phê duyệt tài khoản ${row.username}.`]);
+  await publishRealtimeEvent('accounts', 'registration_pending_approval');
+  await publishRealtimeEvent('notifications', 'notification_created');
+  res.json({ success: true, status: 'pending_approval' });
 });
 
 app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => {
@@ -561,6 +675,46 @@ app.get('/api/admin/users', authenticate, requireRoles('CEO'), async (_req, res)
   res.json(result.rows);
 });
 
+app.get('/api/admin/registration-requests', authenticate, requireRoles('CEO'), async (_req, res) => {
+  const result = await pool.query("SELECT id,username,employee_id,phone,status,otp_verified_at,created_at FROM registration_requests WHERE status='pending_approval' ORDER BY created_at");
+  res.json(result.rows);
+});
+
+app.post('/api/admin/registration-requests/:id/review', authenticate, requireRoles('CEO'), async (req, res) => {
+  const reviewer = res.locals.user as SessionUser;
+  const approved = req.body.approved === true;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pending = await client.query("SELECT * FROM registration_requests WHERE id=$1 AND status='pending_approval' FOR UPDATE", [req.params.id]);
+    const request = pending.rows[0];
+    if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Yêu cầu không tồn tại hoặc đã được xử lý.' }); }
+    if (!approved) {
+      await client.query("UPDATE registration_requests SET status='rejected',reviewed_by=$1,reviewed_at=NOW() WHERE id=$2", [reviewer.id, req.params.id]);
+      await auditOperation(client, reviewer.id, 'registration_rejected', 'registration', String(req.params.id), { employeeId: request.employee_id });
+      await client.query('COMMIT');
+      await publishRealtimeEvent('accounts', 'registration_rejected');
+      return res.json({ success: true, status: 'rejected' });
+    }
+    const payload = await loadErpPayload();
+    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: EmployeeAccountSource) => employeeMatchesId(item, request.employee_id) && item.active !== false);
+    if (!employee) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Hồ sơ nhân viên không còn hoạt động.' }); }
+    const result = await client.query(
+      `INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin)
+       VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active`,
+      [request.username, employee.name, roleForEmployee(employee), request.pin_hash, normalizeEmployeeId(request.employee_id)],
+    );
+    await client.query("UPDATE registration_requests SET status='approved',reviewed_by=$1,reviewed_at=NOW() WHERE id=$2", [reviewer.id, req.params.id]);
+    await auditOperation(client, reviewer.id, 'registration_approved', 'registration', String(req.params.id), { accountId: result.rows[0].id, employeeId: request.employee_id });
+    await client.query('COMMIT');
+    await publishRealtimeEvent('accounts', 'registration_approved');
+    res.status(201).json(result.rows[0]);
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập hoặc nhân viên đã có tài khoản.' : 'Không xử lý được yêu cầu đăng ký.' });
+  } finally { client.release(); }
+});
+
 app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res) => {
   const { username, fullName, employeeId, role = 'Employee', pin } = req.body;
   if (!/^[a-z0-9._-]{3,32}$/.test(String(username || '')) || !/^\d{6,12}$/.test(String(pin || ''))) return res.status(400).json({ error: 'Tên đăng nhập hoặc mật khẩu không hợp lệ.' });
@@ -585,8 +739,17 @@ app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res)
 });
 
 app.patch('/api/admin/users/:id/status', authenticate, requireRoles('CEO'), async (req, res) => {
-  const result = await pool.query('UPDATE app_users SET active=$1,session_version=session_version+1 WHERE id=$2 RETURNING id,active', [Boolean(req.body.active), req.params.id]);
-  await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [res.locals.user.id, 'account_status_changed', { targetUserId: req.params.id, active: Boolean(req.body.active) }]);
+  const actor = res.locals.user as SessionUser;
+  const active = Boolean(req.body.active);
+  if (!active && Number(req.params.id) === actor.id) return res.status(400).json({ error: 'Không thể tự khóa tài khoản đang đăng nhập.' });
+  const target = await pool.query('SELECT role,active FROM app_users WHERE id=$1', [req.params.id]);
+  if (!target.rowCount) return res.status(404).json({ error: 'Tài khoản không tồn tại.' });
+  if (!active && target.rows[0].role === 'CEO' && target.rows[0].active) {
+    const ceos = await pool.query("SELECT COUNT(*)::int AS count FROM app_users WHERE role='CEO' AND active=TRUE");
+    if (Number(ceos.rows[0].count) <= 1) return res.status(409).json({ error: 'Không thể khóa CEO hoạt động cuối cùng.' });
+  }
+  const result = await pool.query('UPDATE app_users SET active=$1,session_version=session_version+1 WHERE id=$2 RETURNING id,active', [active, req.params.id]);
+  await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [actor.id, 'account_status_changed', { targetUserId: req.params.id, active }]);
   await publishRealtimeEvent('accounts', 'account_status_changed');
   res.json(result.rows[0]);
 });
@@ -613,6 +776,10 @@ app.delete('/api/admin/users/:id', authenticate, requireRoles('CEO'), async (req
   if (Number(req.params.id) === Number(user.id)) return res.status(400).json({ error: 'Không thể tự xóa tài khoản đang đăng nhập.' });
   const target = await pool.query('SELECT role FROM app_users WHERE id=$1', [req.params.id]);
   if (!target.rows[0]) return res.status(404).json({ error: 'Tài khoản không tồn tại.' });
+  if (target.rows[0].role === 'CEO') {
+    const ceos = await pool.query("SELECT COUNT(*)::int AS count FROM app_users WHERE role='CEO' AND active=TRUE");
+    if (Number(ceos.rows[0].count) <= 1) return res.status(409).json({ error: 'Không thể xóa CEO hoạt động cuối cùng.' });
+  }
   await pool.query('UPDATE audit_log SET user_id=NULL WHERE user_id=$1', [req.params.id]);
   await pool.query('UPDATE workforce_requests SET reviewed_by=NULL WHERE reviewed_by=$1', [req.params.id]);
   await pool.query('UPDATE work_shifts SET created_by=NULL WHERE created_by=$1', [req.params.id]);
@@ -629,7 +796,7 @@ app.post('/api/admin/reset-system', authenticate, requireRoles('CEO'), async (re
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const table of ['notifications', 'payslip_views', 'privacy_consents', 'work_shifts', 'workforce_requests', 'payroll_periods', 'auth_attempts', 'erp_state_backups', 'audit_log']) {
+    for (const table of ['equipment_dispatches', 'equipment_maintenance_logs', 'equipment_fuel_logs', 'journal_entries', 'accounting_vouchers', 'equipment_registry', 'project_registry', 'registration_requests', 'notifications', 'payslip_views', 'privacy_consents', 'work_shifts', 'workforce_requests', 'payroll_periods', 'auth_attempts', 'erp_state_backups', 'audit_log']) {
       await client.query(`DELETE FROM ${table}`);
     }
     const result = await client.query('UPDATE erp_state SET payload=$1,revision=revision+1,updated_by=$2,updated_at=NOW() WHERE id=1 RETURNING revision,payload,updated_at', [emptyStatePayload(), user.id]);
@@ -644,6 +811,207 @@ app.post('/api/admin/reset-system', authenticate, requireRoles('CEO'), async (re
   } finally {
     client.release();
   }
+});
+
+app.get('/api/operations/:resource', authenticate, async (req, res) => {
+  const resource = String(req.params.resource);
+  if (!isOperationResource(resource)) return res.status(404).json({ error: 'Phân hệ nghiệp vụ không tồn tại.' });
+  const user = res.locals.user as SessionUser;
+  if (user.role === 'Employee') return res.status(403).json({ error: 'Bạn không có quyền xem dữ liệu nghiệp vụ này.' });
+  const spec = OPERATION_RESOURCES[resource];
+  const scope = await operationProjectScope(user);
+  const result = scope
+    ? await pool.query(`SELECT * FROM ${spec.table} WHERE ${spec.project}=ANY($1::text[]) ORDER BY ${spec.date} DESC,created_at DESC LIMIT 2000`, [scope])
+    : await pool.query(`SELECT * FROM ${spec.table} ORDER BY ${spec.date} DESC,created_at DESC LIMIT 2000`);
+  res.json(result.rows.map(operationRow));
+});
+
+app.post('/api/operations/:resource', authenticate, async (req, res) => {
+  const resource = String(req.params.resource);
+  if (!isOperationResource(resource)) return res.status(404).json({ error: 'Phân hệ nghiệp vụ không tồn tại.' });
+  const user = res.locals.user as SessionUser;
+  const spec = OPERATION_RESOURCES[resource];
+  if (!spec.roles.includes(user.role)) return res.status(403).json({ error: 'Bạn không có quyền ghi dữ liệu nghiệp vụ này.' });
+  const body = req.body && typeof req.body === 'object' ? req.body as JsonRecord : {};
+  const id = String(body.id || '').trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(id)) return res.status(400).json({ error: 'Mã bản ghi không hợp lệ.' });
+  if (JSON.stringify(body).length > 100_000) return res.status(413).json({ error: 'Dữ liệu bản ghi quá lớn.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const payload = await loadErpPayload();
+    await syncRegistries(client, payload);
+    const projects = Array.isArray(payload.projects) ? payload.projects : [];
+    const projectByName = projects.find((item: JsonRecord) => String(item.name) === String(body.projectName || body.projectRelated || body.toProjectName));
+    const projectId = String(body.projectId || body.toProjectId || projectByName?.id || '').trim() || null;
+    const scope = await operationProjectScope(user);
+    if (scope && projectId && !scope.includes(projectId)) throw Object.assign(new Error('PROJECT_SCOPE'), { status: 403 });
+    const date = String(body.date || body.postingDate || '').slice(0, 10);
+    const amount = Number(body.amount ?? body.cost);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(amount) || amount < 0) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+    let inserted;
+    if (resource === 'vouchers') {
+      if (amount <= 0 || !['Receipt', 'Payment'].includes(String(body.type))) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+      inserted = await client.query(
+        `INSERT INTO accounting_vouchers(id,voucher_type,voucher_no,voucher_date,project_id,debit_account,credit_account,amount,description,payload,created_by,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING *`,
+        [id, body.type, String(body.voucherNo || id), date, projectId, String(body.debitAccount || ''), String(body.creditAccount || ''), amount, String(body.reason || body.description || ''), body, user.id],
+      );
+    } else if (resource === 'journal') {
+      if (amount <= 0) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+      inserted = await client.query(
+        `INSERT INTO journal_entries(id,posting_date,voucher_no,project_id,debit_account,credit_account,amount,description,source_module,payload,created_by,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING *`,
+        [id, date, String(body.voucherNo || id), projectId, String(body.debitAccount || ''), String(body.creditAccount || ''), amount, String(body.description || ''), String(body.sourceModule || 'Manual'), body, user.id],
+      );
+    } else {
+      const equipmentId = String(body.equipmentId || '').trim();
+      const equipment = await client.query('SELECT id,name,project_id FROM equipment_registry WHERE id=$1 AND active=TRUE', [equipmentId]);
+      if (!equipment.rowCount) throw Object.assign(new Error('EQUIPMENT_NOT_FOUND'), { status: 400 });
+      if (resource !== 'dispatches' && !projectId) body.projectId = equipment.rows[0].project_id;
+      const effectiveProjectId = projectId || equipment.rows[0].project_id;
+      if (scope && (!effectiveProjectId || !scope.includes(String(effectiveProjectId)))) throw Object.assign(new Error('PROJECT_SCOPE'), { status: 403 });
+      if (resource === 'fuel') {
+        const quantity = Number(body.litersOrKw);
+        if (!Number.isFinite(quantity) || quantity <= 0) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+        inserted = await client.query(
+          `INSERT INTO equipment_fuel_logs(id,equipment_id,project_id,log_date,quantity,cost,recorded_by_name,payload,created_by,updated_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,
+          [id, equipmentId, effectiveProjectId, date, quantity, amount, String(body.recordedBy || user.fullName), body, user.id],
+        );
+      } else if (resource === 'maintenance') {
+        if (!['Routine', 'Repair', 'Inspection'].includes(String(body.type))) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+        inserted = await client.query(
+          `INSERT INTO equipment_maintenance_logs(id,equipment_id,project_id,log_date,maintenance_type,cost,details,technician,payload,created_by,updated_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *`,
+          [id, equipmentId, effectiveProjectId, date, body.type, amount, String(body.details || ''), String(body.technician || ''), body, user.id],
+        );
+      } else {
+        if (!projectId) throw Object.assign(new Error('VALIDATION'), { status: 400 });
+        const fromProjectId = String(body.fromProjectId || '').trim();
+        inserted = await client.query(
+          `INSERT INTO equipment_dispatches(id,equipment_id,from_project_id,to_project_id,dispatch_date,cost,recorded_by_name,carrier_unit,payload,created_by,updated_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10) RETURNING *`,
+          [id, equipmentId, fromProjectId && fromProjectId !== 'all' ? fromProjectId : null, projectId, date, amount, String(body.recordedBy || user.fullName), String(body.carrierUnit || ''), body, user.id],
+        );
+        await client.query('UPDATE equipment_registry SET project_id=$1,updated_at=NOW() WHERE id=$2', [projectId, equipmentId]);
+      }
+    }
+    if (resource !== 'journal') {
+      const sourceRow = operationRow(inserted!.rows[0]);
+      const automaticJournalId = `AUTO-${resource}-${id}`.slice(0, 64);
+      const debit = resource === 'vouchers' ? String(body.debitAccount || '') : '627';
+      const credit = resource === 'vouchers' ? String(body.creditAccount || '') : '1111';
+      const journalProjectId = resource === 'dispatches' ? String(body.toProjectId || '') || null : String(body.projectId || inserted!.rows[0].project_id || '') || null;
+      await client.query(
+        `INSERT INTO journal_entries(id,posting_date,voucher_no,project_id,debit_account,credit_account,amount,description,source_module,payload,created_by,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`,
+        [automaticJournalId, date, String(body.voucherNo || id), journalProjectId, debit, credit, amount, String(body.reason || body.details || `${resource} ${id}`), resource === 'vouchers' ? 'Liabilities' : 'Equipment', { ...sourceRow, sourceRecordId: id, sourceResource: resource }, user.id],
+      );
+    }
+    await auditOperation(client, user.id, 'operation_created', resource, id);
+    await client.query('COMMIT');
+    await publishRealtimeEvent('operations', `${resource}_created`);
+    res.status(201).json(operationRow(inserted!.rows[0]));
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    const status = error?.status || (error?.code === '23505' ? 409 : error?.code === '23503' ? 409 : 500);
+    const message = error?.message === 'PROJECT_SCOPE' ? 'Bản ghi nằm ngoài dự án được phân quyền.'
+      : error?.message === 'VALIDATION' ? 'Dữ liệu nghiệp vụ không hợp lệ.'
+        : error?.message === 'EQUIPMENT_NOT_FOUND' ? 'Thiết bị không tồn tại hoặc đã ngừng sử dụng.'
+          : error?.code === '23505' ? 'Mã hoặc số chứng từ đã tồn tại.'
+            : error?.code === '23503' ? 'Dự án hoặc thiết bị đang tham chiếu không hợp lệ.' : 'Không lưu được dữ liệu nghiệp vụ.';
+    res.status(status).json({ error: message });
+  } finally { client.release(); }
+});
+
+app.put('/api/operations/:resource/:id', authenticate, async (req, res) => {
+  const resource = String(req.params.resource);
+  if (!isOperationResource(resource)) return res.status(404).json({ error: 'Phân hệ nghiệp vụ không tồn tại.' });
+  const user = res.locals.user as SessionUser;
+  const spec = OPERATION_RESOURCES[resource];
+  if (!spec.roles.includes(user.role)) return res.status(403).json({ error: 'Bạn không có quyền sửa dữ liệu nghiệp vụ này.' });
+  const rowVersion = Number(req.body.rowVersion);
+  if (!Number.isSafeInteger(rowVersion) || rowVersion < 1) return res.status(400).json({ error: 'Phiên bản bản ghi không hợp lệ.' });
+  const scope = await operationProjectScope(user);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query(`SELECT * FROM ${spec.table} WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if (!current.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Bản ghi không tồn tại.' }); }
+    if (scope && !scope.includes(String(current.rows[0][spec.project]))) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Bản ghi nằm ngoài dự án được phân quyền.' }); }
+    if (Number(current.rows[0].row_version) !== rowVersion) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bản ghi đã được thay đổi trên máy khác.', code: 'ROW_VERSION_CONFLICT', current: operationRow(current.rows[0]) }); }
+    const body = req.body as JsonRecord;
+    const date = String(body.date || body.postingDate || '').slice(0, 10);
+    const amount = Number(body.amount ?? body.cost);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(amount) || amount < 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Dữ liệu nghiệp vụ không hợp lệ.' }); }
+    let result;
+    if (resource === 'vouchers') result = await client.query(
+      `UPDATE accounting_vouchers SET voucher_type=$1,voucher_no=$2,voucher_date=$3,project_id=$4,debit_account=$5,credit_account=$6,amount=$7,description=$8,payload=$9,row_version=row_version+1,updated_by=$10,updated_at=NOW() WHERE id=$11 RETURNING *`,
+      [body.type, body.voucherNo, date, body.projectId || null, body.debitAccount, body.creditAccount, amount, body.reason, body, user.id, req.params.id],
+    );
+    else if (resource === 'journal') result = await client.query(
+      `UPDATE journal_entries SET posting_date=$1,voucher_no=$2,project_id=$3,debit_account=$4,credit_account=$5,amount=$6,description=$7,source_module=$8,payload=$9,row_version=row_version+1,updated_by=$10,updated_at=NOW() WHERE id=$11 RETURNING *`,
+      [date, body.voucherNo, body.projectId || null, body.debitAccount, body.creditAccount, amount, body.description, body.sourceModule || 'Manual', body, user.id, req.params.id],
+    );
+    else if (resource === 'fuel') result = await client.query(
+      `UPDATE equipment_fuel_logs SET project_id=$1,log_date=$2,quantity=$3,cost=$4,recorded_by_name=$5,payload=$6,row_version=row_version+1,updated_by=$7,updated_at=NOW() WHERE id=$8 RETURNING *`,
+      [body.projectId || current.rows[0].project_id, date, Number(body.litersOrKw), amount, body.recordedBy, body, user.id, req.params.id],
+    );
+    else if (resource === 'maintenance') result = await client.query(
+      `UPDATE equipment_maintenance_logs SET project_id=$1,log_date=$2,maintenance_type=$3,cost=$4,details=$5,technician=$6,payload=$7,row_version=row_version+1,updated_by=$8,updated_at=NOW() WHERE id=$9 RETURNING *`,
+      [body.projectId || current.rows[0].project_id, date, body.type, amount, body.details, body.technician, body, user.id, req.params.id],
+    );
+    else result = await client.query(
+      `UPDATE equipment_dispatches SET from_project_id=$1,to_project_id=$2,dispatch_date=$3,cost=$4,recorded_by_name=$5,carrier_unit=$6,payload=$7,row_version=row_version+1,updated_by=$8,updated_at=NOW() WHERE id=$9 RETURNING *`,
+      [body.fromProjectId && body.fromProjectId !== 'all' ? body.fromProjectId : null, body.toProjectId, date, amount, body.recordedBy, body.carrierUnit, body, user.id, req.params.id],
+    );
+    if (resource !== 'journal') {
+      const debit = resource === 'vouchers' ? String(body.debitAccount || '') : '627';
+      const credit = resource === 'vouchers' ? String(body.creditAccount || '') : '1111';
+      const projectId = resource === 'dispatches' ? body.toProjectId : body.projectId || result.rows[0].project_id;
+      await client.query(
+        `UPDATE journal_entries SET posting_date=$1,voucher_no=$2,project_id=$3,debit_account=$4,credit_account=$5,amount=$6,description=$7,payload=payload||$8::jsonb,row_version=row_version+1,updated_by=$9,updated_at=NOW()
+         WHERE payload->>'sourceResource'=$10 AND payload->>'sourceRecordId'=$11`,
+        [date, body.voucherNo || body.id, projectId || null, debit, credit, amount, body.reason || body.details || `${resource} ${body.id}`, body, user.id, resource, req.params.id],
+      );
+    }
+    await auditOperation(client, user.id, 'operation_updated', resource, String(req.params.id), { fromVersion: rowVersion, toVersion: rowVersion + 1 });
+    await client.query('COMMIT');
+    await publishRealtimeEvent('operations', `${resource}_updated`);
+    res.json(operationRow(result.rows[0]));
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    res.status(error?.code === '23505' || error?.code === '23503' || error?.code === '23514' ? 409 : 500).json({ error: 'Không cập nhật được dữ liệu nghiệp vụ.' });
+  } finally { client.release(); }
+});
+
+app.delete('/api/operations/:resource/:id', authenticate, async (req, res) => {
+  const resource = String(req.params.resource);
+  if (!isOperationResource(resource)) return res.status(404).json({ error: 'Phân hệ nghiệp vụ không tồn tại.' });
+  const user = res.locals.user as SessionUser;
+  const spec = OPERATION_RESOURCES[resource];
+  if (!spec.roles.includes(user.role)) return res.status(403).json({ error: 'Bạn không có quyền xóa dữ liệu nghiệp vụ này.' });
+  const expectedVersion = Number(req.query.version);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) return res.status(400).json({ error: 'Phiên bản bản ghi không hợp lệ.' });
+  const scope = await operationProjectScope(user);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query(`SELECT * FROM ${spec.table} WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    if (!current.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Bản ghi không tồn tại.' }); }
+    if (scope && !scope.includes(String(current.rows[0][spec.project]))) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Bản ghi nằm ngoài dự án được phân quyền.' }); }
+    if (Number(current.rows[0].row_version) !== expectedVersion) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bản ghi đã được thay đổi trên máy khác.', code: 'ROW_VERSION_CONFLICT', current: operationRow(current.rows[0]) }); }
+    if (resource !== 'journal') await client.query("DELETE FROM journal_entries WHERE payload->>'sourceResource'=$1 AND payload->>'sourceRecordId'=$2", [resource, req.params.id]);
+    await client.query(`DELETE FROM ${spec.table} WHERE id=$1`, [req.params.id]);
+    await auditOperation(client, user.id, 'operation_deleted', resource, String(req.params.id), { deleted: operationRow(current.rows[0]) });
+    await client.query('COMMIT');
+    await publishRealtimeEvent('operations', `${resource}_deleted`);
+    res.json({ success: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Không xóa được dữ liệu nghiệp vụ.' });
+  } finally { client.release(); }
 });
 
 app.get('/api/workforce/requests', authenticate, async (_req, res) => {
@@ -898,6 +1266,8 @@ app.put('/api/state', authenticate, async (req, res) => {
   await pool.query('DELETE FROM notifications WHERE employee_id IS NOT NULL AND UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
   await pool.query('DELETE FROM payslip_views WHERE UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
   await pool.query('DELETE FROM privacy_consents WHERE UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
+  const registryClient = await pool.connect();
+  try { await syncRegistries(registryClient, permittedPayload); } finally { registryClient.release(); }
   res.json(result.rows[0]);
 });
 
@@ -906,6 +1276,8 @@ app.use(express.static(dist, { maxAge: '1d', etag: true }));
 app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 
 await migrate();
+const registryBootstrapClient = await pool.connect();
+try { await syncRegistries(registryBootstrapClient, await loadErpPayload()); } finally { registryBootstrapClient.release(); }
 
 const seeds: Array<[string, string, Role, string, string?]> = [
   ['ceo', 'Giám đốc', 'CEO', process.env.SEED_CEO_PIN || '1111'],

@@ -63,7 +63,7 @@ export const dbTables: DbTable[] = [
       { name: 'phone', type: 'VARCHAR(20)', constraints: ['NOT NULL', 'UNIQUE'], description: 'Số điện thoại liên hệ (dùng để đăng nhập app).' },
       { name: 'base_salary', type: 'NUMERIC(15, 2)', constraints: ['NOT NULL'], description: 'Mức lương cơ bản (Theo tháng với cơ hữu, Theo ngày công với thời vụ).' },
       { name: 'active', type: 'BOOLEAN', constraints: ['DEFAULT TRUE'], description: 'Trạng thái đang làm việc hay đã nghỉ.' },
-      { name: 'face_embedding', type: 'VECTOR(512)', constraints: [], description: 'Vector nhận diện khuôn mặt phục vụ chấm công chống gian lận.' }
+      { name: 'attendance_photo', type: 'TEXT', constraints: [], description: 'Ảnh bằng chứng chấm công khi nhân viên đã đồng ý; không phải dữ liệu nhận diện khuôn mặt.' }
     ]
   },
   {
@@ -161,7 +161,7 @@ export const dbTables: DbTable[] = [
       { name: 'latitude', type: 'DECIMAL(10, 8)', constraints: ['NOT NULL'], description: 'Vĩ độ GPS thiết bị di động lúc chấm công.' },
       { name: 'longitude', type: 'DECIMAL(11, 8)', constraints: ['NOT NULL'], description: 'Kinh độ GPS thiết bị di động lúc chấm công.' },
       { name: 'gps_status', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (gps_status IN (\'In-Range\', \'Out-Of-Range\'))'], description: 'Trạng thái định vị: In-Range (Nằm trong bán kính 200m của dự án) hoặc Out-Of-Range (Ngoài bán kính).' },
-      { name: 'verified_by_face', type: 'BOOLEAN', constraints: ['DEFAULT FALSE'], description: 'Xác thực khớp khuôn mặt qua AI camera chống chấm công hộ (True/False).' }
+      { name: 'photo_provided', type: 'BOOLEAN', constraints: ['DEFAULT FALSE'], description: 'Có ảnh bằng chứng chấm công để quản lý đối chiếu thủ công.' }
     ]
   },
   {
@@ -331,7 +331,6 @@ export function generatePostgreSqlDdl(): string {
   ddl += `-- =========================================================================\n\n`;
 
   ddl += `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";\n`;
-  ddl += `CREATE EXTENSION IF NOT EXISTS "vector"; -- Phục vụ chấm công đối khớp khuôn mặt bằng AI\n\n`;
 
   // Write tables in order of dependency
   const sortedTables = [

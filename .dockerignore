@@ -3,4 +3,5 @@ dist
 release
 .git
 .env
+.installation-credentials
 *.log

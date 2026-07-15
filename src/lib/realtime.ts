@@ -1,6 +1,6 @@
 import { apiFetch } from './api';
 
-export type RealtimeChannel = 'accounts' | 'notifications' | 'workforce_requests' | 'shifts' | 'payroll_periods';
+export type RealtimeChannel = 'accounts' | 'notifications' | 'workforce_requests' | 'shifts' | 'payroll_periods' | 'operations';
 export interface RealtimeEvent { id: number; channel: RealtimeChannel; event_type: string; created_at: string }
 
 const delay = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
