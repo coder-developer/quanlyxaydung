@@ -18,3 +18,11 @@ Nội dung chính của bản phát hành:
 - Bộ lọc tài khoản theo vai trò và công trường; đăng nhập bằng tên tài khoản hoặc mã nhân viên.
 
 Gói mã nguồn không chứa `.env`, mật khẩu, dữ liệu PostgreSQL hoặc file sao lưu của doanh nghiệp.
+
+Kiểm tra phát hành:
+
+- `npm run check`: đạt.
+- `npm audit --omit=dev`: 0 lỗ hổng.
+- Docker Compose: app và PostgreSQL healthy.
+- Migration giữ nguyên dữ liệu nghiệp vụ, chỉ thay các giá trị thông tin doanh nghiệp demo cũ hoặc để trống.
+- Kiểm thử API xác nhận phân quyền theo công trường, nhập/xuất kho, tạo tài khoản nhân viên, nghỉ phép và tạm ứng lương.
