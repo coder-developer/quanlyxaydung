@@ -4,28 +4,13 @@
  */
 
 import React, { lazy, useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import {
-  initialProjects,
-  initialEmployees,
-  initialContractors,
-  initialContracts,
-  initialInventoryItems,
-  initialMaterialLimits,
-  initialInventoryLedger,
-  initialTimesheets,
-  initialEquipment,
-  initialApprovalRequests,
-  initialFinancialTransactions,
-  initialLaborContracts,
-  initialConstructionTasks
-} from './data/mockData';
 import { Project, Employee, Contractor, Contract, InventoryItem, MaterialLimit, InventoryLedger, Timesheet, Equipment, ApprovalRequest, FinancialTransaction, LaborContract, ConstructionTask, CompanyConfig, UserRole } from './types';
 
 // Components
 import LoginScreen from './components/LoginScreen';
 import ChangePinButton from './components/ChangePinButton';
 import { readStoredJson } from './lib/storage';
-import { apiLogout, fetchServerRevision, fetchServerState, hasApiSession, saveServerState, syncServerBusinessIds } from './lib/api';
+import { apiCurrentUser, apiLogout, apiResetSystem, fetchServerRevision, fetchServerState, hasApiSession, saveServerState, syncServerBusinessIds } from './lib/api';
 import { synchronizeBusinessIds } from './lib/businessIds';
 
 const DashboardView = lazy(() => import('./components/DashboardView'));
@@ -45,16 +30,52 @@ const WorkforceAdmin = lazy(() => import('./components/WorkforceAdmin'));
 const MasterDataEditor = lazy(() => import('./components/MasterDataEditor'));
 
 // Icons
-import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, LogOut } from 'lucide-react';
+import { LayoutDashboard, Database, RefreshCcw, Landmark, ClipboardList, ShieldCheck, FileSpreadsheet, KeyRound, HardHat, Sparkles, Users, Boxes, Wrench, BookOpen, Building2, Search, X, Eye, ArrowRight, Info, MapPin, Hammer, AlertTriangle, Clock, Cloud, Lock, LogOut, ChevronDown } from 'lucide-react';
+
+const DEFAULT_COMPANY_CONFIG: CompanyConfig = {
+  companyName: 'Công Ty Cổ Phần Xây Dựng', siteOffice: 'Tp Hồ Chí Minh', directorName: '', chiefAccountantName: '', treasurerName: '', technicianName: '',
+  journalTitle: 'SỔ NHẬT KÝ CHUNG', dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ', fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU', maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+  appTitle: 'Quản trị doanh nghiệp', siteManagerApprovalLimit: 50_000_000, accountantApprovalLimit: 200_000_000, fuelVarianceThreshold: 5, maxDailyWorkHours: 12, requireDoubleApproval: true,
+};
+
+type AppTab = 'dashboard' | 'projects' | 'schema' | 'flows' | 'sim' | 'liabilities' | 'hr' | 'workforce' | 'masterdata' | 'warehouse' | 'equipment' | 'journal' | 'company' | 'drive';
+
+const NAV_GROUPS: Array<{
+  id: 'director' | 'project' | 'accounting';
+  label: string;
+  color: string;
+  items: Array<{ tab: AppTab; label: string; icon: React.ComponentType<{ className?: string }> }>;
+}> = [
+  { id: 'director', label: 'Ban Giám Đốc', color: 'text-blue-400', items: [
+    { tab: 'dashboard', label: 'Tổng quan & Báo cáo', icon: LayoutDashboard },
+    { tab: 'company', label: 'Thông tin Doanh nghiệp', icon: Building2 },
+    { tab: 'hr', label: 'Nhân sự & Chấm công', icon: Users },
+    { tab: 'workforce', label: 'Vận hành Nhân sự', icon: ClipboardList },
+  ] },
+  { id: 'project', label: 'Ban Dự Án', color: 'text-emerald-400', items: [
+    { tab: 'projects', label: 'Quản lý dự án', icon: Building2 },
+    { tab: 'masterdata', label: 'Dữ liệu danh mục', icon: Database },
+    { tab: 'warehouse', label: 'Kho vật tư', icon: Boxes },
+    { tab: 'equipment', label: 'Thiết bị & Dụng cụ', icon: Wrench },
+    { tab: 'drive', label: 'Lưu trữ Google Drive', icon: Cloud },
+    { tab: 'sim', label: 'Mô phỏng Sandbox', icon: Sparkles },
+  ] },
+  { id: 'accounting', label: 'Ban Kế Toán', color: 'text-violet-400', items: [
+    { tab: 'liabilities', label: 'Công nợ & Hợp đồng', icon: Landmark },
+    { tab: 'journal', label: 'Nhật ký chung Kế toán', icon: BookOpen },
+  ] },
+];
 
 export default function App() {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'schema' | 'flows' | 'sim' | 'liabilities' | 'hr' | 'workforce' | 'masterdata' | 'warehouse' | 'equipment' | 'journal' | 'company' | 'drive'>('dashboard');
+  const [activeTab, setActiveTab] = useState<AppTab>('dashboard');
+  const [openNavGroups, setOpenNavGroups] = useState<Record<'director' | 'project' | 'accounting', boolean>>({ director: true, project: false, accounting: false });
 
   // --- CURRENT ROLE FOR ROLE-BASED ACCESS CONTROL (RBAC) ---
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(() => {
+    if (serverMode) return 'Auditor';
     const saved = localStorage.getItem('erp_current_user_role');
-    return (saved as UserRole) || 'CEO';
+    return (saved as UserRole) || 'Auditor';
   });
 
   // --- CURRENT USER FULL NAME ---
@@ -67,6 +88,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     return localStorage.getItem('erp_is_logged_in') === 'true' && (!serverMode || hasApiSession());
   });
+  const [sessionVerified, setSessionVerified] = useState(() => !serverMode || !hasApiSession());
 
   const handleLoginSuccess = useCallback((role: UserRole, fullName?: string, employeeId?: string) => {
     setCurrentUserRole(role);
@@ -83,6 +105,7 @@ export default function App() {
     if (employeeId) localStorage.setItem('erp_current_employee_id', employeeId);
     else localStorage.removeItem('erp_current_employee_id');
     setIsLoggedIn(true);
+    setSessionVerified(true);
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -90,7 +113,18 @@ export default function App() {
     setCurrentUserFullName(null);
     setCurrentEmployeeId(null);
     setIsLoggedIn(false);
+    setSessionVerified(true);
   }, []);
+
+  useEffect(() => {
+    if (!serverMode || !isLoggedIn || sessionVerified) return;
+    apiCurrentUser().then(({ user }) => {
+      setCurrentUserRole(user.role);
+      setCurrentUserFullName(user.fullName);
+      setCurrentEmployeeId(user.employeeId || null);
+      setSessionVerified(true);
+    }).catch(handleLogout);
+  }, [serverMode, isLoggedIn, sessionVerified, handleLogout]);
 
   useEffect(() => {
     window.addEventListener('erp:session-expired', handleLogout);
@@ -99,17 +133,17 @@ export default function App() {
 
   const [permissionDeniedMsg, setPermissionDeniedMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('erp_current_user_role', currentUserRole);
-  }, [currentUserRole]);
-
   // Check if a tab is restricted for the current role
   const isTabRestricted = useCallback((tab: string) => {
-    if (currentUserRole === 'SiteManager') {
-      const siteManagerRestricted = ['schema', 'liabilities', 'company', 'journal', 'masterdata'];
-      return siteManagerRestricted.includes(tab);
-    }
-    return false;
+    const allowedByRole: Record<UserRole, string[]> = {
+      CEO: ['dashboard','projects','company','hr','workforce','masterdata','warehouse','equipment','liabilities','journal','drive','sim','schema','flows'],
+      ChiefAccountant: ['dashboard','projects','warehouse','equipment','liabilities','journal','hr','workforce','drive'],
+      SiteAccountant: ['dashboard','projects','warehouse','equipment'],
+      SiteManager: ['dashboard','projects','hr','workforce','warehouse','equipment','sim'],
+      Auditor: ['dashboard','projects','liabilities','journal'],
+      Employee: [],
+    };
+    return !allowedByRole[currentUserRole].includes(tab);
   }, [currentUserRole]);
 
   // Handle restricted active tab redirect
@@ -148,76 +182,59 @@ export default function App() {
         ...parsed
       };
     }
-    return {
-      companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
-      directorName: 'Đỗ Minh Tuấn',
-      chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-      treasurerName: 'Lê Thị Thu',
-      technicianName: 'Trần Hải Nam',
-      journalTitle: 'SỔ NHẬT KÝ CHUNG',
-      dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
-      maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-      appTitle: 'Quản Trị Doanh Nghiệp',
-      siteManagerApprovalLimit: 50000000,
-      accountantApprovalLimit: 200000000,
-      fuelVarianceThreshold: 5,
-      maxDailyWorkHours: 12,
-      requireDoubleApproval: true,
-    };
+    return { ...DEFAULT_COMPANY_CONFIG };
   });
 
   const [projects, setProjects] = useState<Project[]>(() => {
-    return readStoredJson('erp_projects', initialProjects);
+    return readStoredJson('erp_projects', []);
   });
 
   const [employees, setEmployees] = useState<Employee[]>(() => {
-    return readStoredJson('erp_employees', initialEmployees);
+    return readStoredJson('erp_employees', []);
   });
 
   const [contractors, setContractors] = useState<Contractor[]>(() => {
-    return readStoredJson('erp_contractors', initialContractors);
+    return readStoredJson('erp_contractors', []);
   });
 
   const [contracts, setContracts] = useState<Contract[]>(() => {
-    return readStoredJson('erp_contracts', initialContracts);
+    return readStoredJson('erp_contracts', []);
   });
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => {
-    return readStoredJson('erp_inventory_items', initialInventoryItems);
+    return readStoredJson('erp_inventory_items', []);
   });
 
   const [materialLimits, setMaterialLimits] = useState<MaterialLimit[]>(() => {
-    return readStoredJson('erp_material_limits', initialMaterialLimits);
+    return readStoredJson('erp_material_limits', []);
   });
 
   const [inventoryLedger, setInventoryLedger] = useState<InventoryLedger[]>(() => {
-    return readStoredJson('erp_inventory_ledger', initialInventoryLedger);
+    return readStoredJson('erp_inventory_ledger', []);
   });
 
   const [timesheets, setTimesheets] = useState<Timesheet[]>(() => {
-    return readStoredJson('erp_timesheets', initialTimesheets);
+    return readStoredJson('erp_timesheets', []);
   });
 
   const [equipment, setEquipment] = useState<Equipment[]>(() => {
-    return readStoredJson('erp_equipment', initialEquipment);
+    return readStoredJson('erp_equipment', []);
   });
 
   const [approvals, setApprovals] = useState<ApprovalRequest[]>(() => {
-    return readStoredJson('erp_approvals', initialApprovalRequests);
+    return readStoredJson('erp_approvals', []);
   });
 
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
-    return readStoredJson('erp_transactions', initialFinancialTransactions);
+    return readStoredJson('erp_transactions', []);
   });
 
   const [laborContracts, setLaborContracts] = useState<LaborContract[]>(() => {
-    return readStoredJson('erp_labor_contracts', initialLaborContracts);
+    return readStoredJson('erp_labor_contracts', []);
   });
 
   const [constructionTasks, setConstructionTasks] = useState<ConstructionTask[]>(() => {
-    return readStoredJson('erp_construction_tasks', initialConstructionTasks);
+    return readStoredJson('erp_construction_tasks', []);
   });
 
   // --- PERSISTENCE EFFECT ---
@@ -542,7 +559,7 @@ export default function App() {
 
   // Mã nghiệp vụ là khóa chính. Khi mã thay đổi, cập nhật toàn bộ quan hệ liên quan theo một lần đồng bộ.
   useEffect(() => {
-    if (!isLoggedIn || (serverMode && !serverReady) || !['CEO', 'Accountant'].includes(currentUserRole) || businessIdSyncInFlight.current) return;
+    if (!isLoggedIn || (serverMode && !serverReady) || currentUserRole !== 'CEO' || businessIdSyncInFlight.current) return;
     const synchronized = synchronizeBusinessIds({
       projects, employees, contractors, contracts, inventoryItems, materialLimits,
       inventoryLedger, timesheets, equipment, approvals, transactions, laborContracts, constructionTasks,
@@ -897,54 +914,18 @@ export default function App() {
   }, []);
 
   // --- HANDLER: RESET SIMULATION DATA ---
-  const handleResetData = useCallback(() => {
-    localStorage.removeItem('erp_company_config');
-    localStorage.removeItem('erp_projects');
-    localStorage.removeItem('erp_employees');
-    localStorage.removeItem('erp_contractors');
-    localStorage.removeItem('erp_contracts');
-    localStorage.removeItem('erp_inventory_items');
-    localStorage.removeItem('erp_material_limits');
-    localStorage.removeItem('erp_inventory_ledger');
-    localStorage.removeItem('erp_timesheets');
-    localStorage.removeItem('erp_equipment');
-    localStorage.removeItem('erp_approvals');
-    localStorage.removeItem('erp_transactions');
-    localStorage.removeItem('erp_labor_contracts');
-    localStorage.removeItem('erp_construction_tasks');
-
-    setCompanyConfig({
-      companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-      siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
-      directorName: 'Đỗ Minh Tuấn',
-      chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-      treasurerName: 'Lê Thị Thu',
-      technicianName: 'Trần Hải Nam',
-      journalTitle: 'SỔ NHẬT KÝ CHUNG',
-      dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-      fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
-      maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-      appTitle: 'Quản Trị Doanh Nghiệp',
-      siteManagerApprovalLimit: 50000000,
-      accountantApprovalLimit: 200000000,
-      fuelVarianceThreshold: 5,
-      maxDailyWorkHours: 12,
-      requireDoubleApproval: true,
-    });
-    setProjects(initialProjects);
-    setEmployees(initialEmployees);
-    setContractors(initialContractors);
-    setContracts(initialContracts);
-    setInventoryItems(initialInventoryItems);
-    setMaterialLimits(initialMaterialLimits);
-    setInventoryLedger(initialInventoryLedger);
-    setTimesheets(initialTimesheets);
-    setEquipment(initialEquipment);
-    setApprovals(initialApprovalRequests);
-    setTransactions(initialFinancialTransactions);
-    setLaborContracts(initialLaborContracts);
-    setConstructionTasks(initialConstructionTasks);
-  }, []);
+  const handleResetData = useCallback(async () => {
+    if (!window.confirm('Xóa toàn bộ dữ liệu phát sinh và đưa hệ thống về dữ liệu trắng? Hành động này không thể hoàn tác.')) return;
+    if (serverMode) {
+      const remote = await apiResetSystem();
+      serverRevision.current = Number(remote.revision);
+    }
+    for (const key of ['erp_company_config','erp_projects','erp_employees','erp_contractors','erp_contracts','erp_inventory_items','erp_material_limits','erp_inventory_ledger','erp_timesheets','erp_equipment','erp_approvals','erp_transactions','erp_labor_contracts','erp_construction_tasks']) localStorage.removeItem(key);
+    setCompanyConfig({ ...DEFAULT_COMPANY_CONFIG });
+    setProjects([]); setEmployees([]); setContractors([]); setContracts([]); setInventoryItems([]); setMaterialLimits([]); setInventoryLedger([]);
+    setTimesheets([]); setEquipment([]); setApprovals([]); setTransactions([]); setLaborContracts([]); setConstructionTasks([]);
+    lastSyncedPayload.current = JSON.stringify({ companyConfig: DEFAULT_COMPANY_CONFIG, projects: [], employees: [], contractors: [], contracts: [], inventoryItems: [], materialLimits: [], inventoryLedger: [], timesheets: [], equipment: [], approvals: [], transactions: [], laborContracts: [], constructionTasks: [] });
+  }, [serverMode]);
 
   // --- SECURE STATE SETTERS FOR ROLE-BASED ACCESS CONTROL (RBAC) ---
   const secureSetState = useCallback(<T,>(
@@ -971,12 +952,12 @@ export default function App() {
       setPermissionDeniedMsg('Hành động khôi phục dữ liệu gốc hệ thống yêu cầu đặc quyền tối cao của Giám Đốc (CEO).');
       return;
     }
-    handleResetData();
+    handleResetData().catch(error => setPermissionDeniedMsg(error instanceof Error ? error.message : 'Không thể reset hệ thống.'));
   }, [currentUserRole, handleResetData]);
 
   const securedHandleApproveLevel = useCallback((reqId: string, actor: string, note: string) => {
-    if (currentUserRole !== 'CEO') {
-      setPermissionDeniedMsg(`Đặc quyền phê duyệt thanh toán, hồ sơ hoặc ký số quyết định chỉ dành cho Giám Đốc (CEO). Vai trò hiện tại "${currentUserRole === 'SiteManager' ? 'Chỉ Huy Trưởng' : currentUserRole}" không có quyền duyệt chi.`);
+    if (!['CEO', 'ChiefAccountant'].includes(currentUserRole)) {
+      setPermissionDeniedMsg('Chỉ Giám đốc hoặc Kế toán trưởng được phê duyệt chi.');
       return;
     }
     handleApproveLevel(reqId, actor, note);
@@ -999,25 +980,30 @@ export default function App() {
   }, [currentUserRole, handleDispatchMachine]);
 
   // --- UNCONDITIONAL TOP-LEVEL MEMOIZED SECURED SETTERS (RBAC) ---
-  const securedSetContractors = useMemo(() => secureSetState(setContractors, ['CEO', 'Accountant'], 'Nhà thầu & Thầu phụ'), [secureSetState, setContractors]);
-  const securedSetContracts = useMemo(() => secureSetState(setContracts, ['CEO', 'Accountant'], 'Hợp đồng kinh tế'), [secureSetState, setContracts]);
-  const securedSetTransactions = useMemo(() => secureSetState(setTransactions, ['CEO', 'Accountant'], 'Giao dịch tài chính / Chi trả'), [secureSetState, setTransactions]);
+  const securedSetContractors = useMemo(() => secureSetState(setContractors, ['CEO', 'ChiefAccountant'], 'Nhà thầu & Thầu phụ'), [secureSetState, setContractors]);
+  const securedSetContracts = useMemo(() => secureSetState(setContracts, ['CEO', 'ChiefAccountant'], 'Hợp đồng kinh tế'), [secureSetState, setContracts]);
+  const securedSetTransactions = useMemo(() => secureSetState(setTransactions, ['CEO', 'ChiefAccountant', 'SiteAccountant'], 'Giao dịch tài chính / Chi trả'), [secureSetState, setTransactions]);
   const securedSetProjectsCEO = useMemo(() => secureSetState(setProjects, ['CEO'], 'Thông tin Dự án'), [secureSetState, setProjects]);
-  const securedSetEmployees = useMemo(() => secureSetState(setEmployees, ['CEO', 'Accountant'], 'Hồ sơ Nhân sự'), [secureSetState, setEmployees]);
-  const securedSetTimesheets = useMemo(() => secureSetState(setTimesheets, ['CEO', 'Accountant', 'SiteManager', 'Employee'], 'Bảng Chấm công'), [secureSetState, setTimesheets]);
-  const securedSetLaborContracts = useMemo(() => secureSetState(setLaborContracts, ['CEO', 'Accountant'], 'Hợp đồng Lao động'), [secureSetState, setLaborContracts]);
-  const securedSetConstructionTasks = useMemo(() => secureSetState(setConstructionTasks, ['CEO', 'Accountant', 'SiteManager'], 'Nhiệm vụ thi công'), [secureSetState, setConstructionTasks]);
-  const securedSetInventoryItems = useMemo(() => secureSetState(setInventoryItems, ['CEO', 'Accountant', 'SiteManager'], 'Kho vật tư'), [secureSetState, setInventoryItems]);
-  const securedSetInventoryLedger = useMemo(() => secureSetState(setInventoryLedger, ['CEO', 'Accountant', 'SiteManager'], 'Nhật ký xuất nhập kho'), [secureSetState, setInventoryLedger]);
-  const securedSetMaterialLimits = useMemo(() => secureSetState(setMaterialLimits, ['CEO', 'Accountant', 'SiteManager'], 'Định mức hạn mức vật tư'), [secureSetState, setMaterialLimits]);
+  const securedSetEmployees = useMemo(() => secureSetState(setEmployees, ['CEO', 'SiteManager'], 'Hồ sơ Nhân sự'), [secureSetState, setEmployees]);
+  const securedSetTimesheets = useMemo(() => secureSetState(setTimesheets, ['CEO', 'SiteManager', 'Employee'], 'Bảng Chấm công'), [secureSetState, setTimesheets]);
+  const securedSetLaborContracts = useMemo(() => secureSetState(setLaborContracts, ['CEO', 'ChiefAccountant'], 'Hợp đồng Lao động'), [secureSetState, setLaborContracts]);
+  const securedSetConstructionTasks = useMemo(() => secureSetState(setConstructionTasks, ['CEO', 'SiteManager'], 'Nhiệm vụ thi công'), [secureSetState, setConstructionTasks]);
+  const securedSetInventoryItems = useMemo(() => secureSetState(setInventoryItems, ['CEO', 'SiteManager', 'SiteAccountant'], 'Kho vật tư'), [secureSetState, setInventoryItems]);
+  const securedSetInventoryLedger = useMemo(() => secureSetState(setInventoryLedger, ['CEO', 'SiteManager', 'SiteAccountant'], 'Nhật ký xuất nhập kho'), [secureSetState, setInventoryLedger]);
+  const securedSetMaterialLimits = useMemo(() => secureSetState(setMaterialLimits, ['CEO', 'SiteManager', 'SiteAccountant'], 'Định mức hạn mức vật tư'), [secureSetState, setMaterialLimits]);
   const securedSetCompanyConfig = useMemo(() => secureSetState(setCompanyConfig, ['CEO'], 'Thông tin Doanh nghiệp'), [secureSetState, setCompanyConfig]);
-  const securedSetEquipment = useMemo(() => secureSetState(setEquipment, ['CEO', 'Accountant', 'SiteManager'], 'Thiết bị & Dụng cụ'), [secureSetState, setEquipment]);
+  const securedSetEquipment = useMemo(() => secureSetState(setEquipment, ['CEO', 'SiteManager', 'SiteAccountant'], 'Thiết bị & Dụng cụ'), [secureSetState, setEquipment]);
+  const securedSetProjectsOperational = useMemo(() => secureSetState(setProjects, ['CEO', 'SiteManager'], 'Dự án được phân công'), [secureSetState, setProjects]);
+
+  if (serverMode && isLoggedIn && !sessionVerified) {
+    return <div className="min-h-screen bg-slate-950 text-white grid place-items-center text-sm font-bold">Đang xác minh phiên đăng nhập...</div>;
+  }
 
   if (!isLoggedIn) {
     return (
       <LoginScreen
         onLoginSuccess={handleLoginSuccess}
-        appTitle={companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}
+        appTitle={companyConfig?.appTitle || 'Quản trị doanh nghiệp'}
         companyName={companyConfig?.companyName}
       />
     );
@@ -1054,7 +1040,7 @@ export default function App() {
             <img src="/app-avatar-192.png" alt="Biểu tượng ứng dụng" className="w-9 h-9 rounded-lg object-cover shadow-lg shadow-blue-500/20 ring-1 ring-white/10" />
             <div className="flex flex-col">
               <span className="text-white font-bold text-sm md:text-base tracking-tight leading-none uppercase">
-                {companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}
+                {companyConfig?.appTitle || 'Quản trị doanh nghiệp'}
               </span>
               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-1">STANDARD V1.0</span>
             </div>
@@ -1064,13 +1050,49 @@ export default function App() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav className="flex flex-row md:flex-col gap-1.5 md:space-y-1.5 p-2 md:p-4 overflow-x-auto md:overflow-y-auto scrollbar-none md:flex-1 shrink-0">
-          <div className="hidden md:block text-slate-500 text-[9px] font-extrabold uppercase tracking-widest mb-3 px-3">Main Management</div>
+        {/* Compact dropdown navigation */}
+        <nav className="flex-1 space-y-2 overflow-y-auto p-3">
+          {NAV_GROUPS.map(group => {
+            const visibleItems = group.items.filter(item => !isTabRestricted(item.tab));
+            if (!visibleItems.length) return null;
+            const isOpen = openNavGroups[group.id];
+            const containsActive = visibleItems.some(item => item.tab === activeTab);
+            return <section key={group.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/30">
+              <button
+                type="button"
+                onClick={() => setOpenNavGroups(current => ({ ...current, [group.id]: !current[group.id] }))}
+                className={`flex w-full items-center justify-between px-3 py-2.5 text-[10px] font-black uppercase tracking-widest ${group.color}`}
+                aria-expanded={isOpen}
+              >
+                <span>{group.label}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {isOpen && <div className="space-y-1 border-t border-slate-800 p-2">
+                {visibleItems.map(item => {
+                  const Icon = item.icon;
+                  return <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => handleTabClick(item.tab, item.label)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-semibold transition-colors ${activeTab === item.tab ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </button>;
+                })}
+              </div>}
+              {!isOpen && containsActive && <div className="h-0.5 bg-blue-500" />}
+            </section>;
+          })}
+        </nav>
+
+        {/* Legacy navigation is retained temporarily for markup compatibility and hidden. */}
+        <nav className="hidden">
+          <div className="hidden md:block order-[10] text-blue-400 text-[9px] font-extrabold uppercase tracking-widest mb-2 px-3">Ban Giám Đốc</div>
 
           <button
             onClick={() => handleTabClick('dashboard', 'Báo cáo Tài chính P&L')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[11] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'dashboard'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -1082,16 +1104,17 @@ export default function App() {
             </div>
           </button>
 
+          <div className="hidden md:block order-[20] text-emerald-400 text-[9px] font-extrabold uppercase tracking-widest mt-4 mb-2 px-3">Ban Dự Án</div>
           <button
             onClick={() => handleTabClick('projects', 'Quản lý dự án')}
-            className={`flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'projects' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`order-[21] flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'projects' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
           >
             <div className="flex items-center gap-2.5 md:gap-3"><Building2 className="w-4 h-4 shrink-0"/><span>Quản lý dự án</span></div>
           </button>
 
           <button
             onClick={() => handleTabClick('company', 'Thông tin Doanh nghiệp')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[12] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'company'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('company')
@@ -1108,7 +1131,7 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('journal', 'Nhật ký chung Kế toán')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[31] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'journal'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('journal')
@@ -1125,7 +1148,7 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('liabilities', 'Công nợ & Thầu phụ')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[32] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'liabilities'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('liabilities')
@@ -1142,7 +1165,7 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('hr', 'Nhân sự & Chấm công')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[13] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'hr'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('hr')
@@ -1159,16 +1182,16 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('workforce', 'Vận hành Nhân sự')}
-            className={`flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'workforce' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            className={`order-[14] flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'workforce' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
           >
             <div className="flex items-center gap-2.5 md:gap-3"><ClipboardList className="w-4 h-4 shrink-0"/><span>Vận hành Nhân sự</span></div>
           </button>
 
-          <button onClick={() => handleTabClick('masterdata', 'Dữ liệu danh mục')} className={`flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'masterdata' ? 'bg-blue-600 text-white shadow-xs' : isTabRestricted('masterdata') ? 'text-slate-600 opacity-55' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><div className="flex items-center gap-2.5 md:gap-3"><Database className="w-4 h-4 shrink-0"/><span>Dữ liệu danh mục</span></div></button>
+          <button onClick={() => handleTabClick('masterdata', 'Dữ liệu danh mục')} className={`order-[22] flex-none md:w-full flex items-center px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${activeTab === 'masterdata' ? 'bg-blue-600 text-white shadow-xs' : isTabRestricted('masterdata') ? 'text-slate-600 opacity-55' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><div className="flex items-center gap-2.5 md:gap-3"><Database className="w-4 h-4 shrink-0"/><span>Dữ liệu danh mục</span></div></button>
 
           <button
             onClick={() => handleTabClick('warehouse', 'Kho vật tư')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[23] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'warehouse'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('warehouse')
@@ -1185,7 +1208,7 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('equipment', 'Thiết bị & Dụng cụ')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[24] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'equipment'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('equipment')
@@ -1202,7 +1225,7 @@ export default function App() {
 
           <button
             onClick={() => handleTabClick('drive', 'Lưu trữ Google Drive')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
+            className={`order-[25] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors text-left ${
               activeTab === 'drive'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('drive')
@@ -1217,11 +1240,11 @@ export default function App() {
             {isTabRestricted('drive') && <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
           </button>
 
-          <div className="hidden md:block text-slate-500 text-[9px] font-extrabold uppercase tracking-widest mt-6 mb-3 px-3">Site Operations</div>
+          <div className="hidden md:block order-[30] text-violet-400 text-[9px] font-extrabold uppercase tracking-widest mt-4 mb-2 px-3">Ban Kế Toán</div>
 
           <button
-            onClick={() => handleTabClick('sim', 'Live Ops Simulator')}
-            className={`flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors relative text-left ${
+            onClick={() => handleTabClick('sim', 'Mô phỏng Sandbox')}
+            className={`order-[26] flex-none md:w-full flex items-center justify-between px-3.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-colors relative text-left ${
               activeTab === 'sim'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : isTabRestricted('sim')
@@ -1231,7 +1254,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2.5 md:gap-3">
               <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Live Ops Simulator</span>
+              <span>Mô phỏng Sandbox</span>
             </div>
             {approvals.some(r => r.status.startsWith('Pending')) && (
               <span className="absolute top-2.5 right-3 w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse"></span>
@@ -1256,20 +1279,23 @@ export default function App() {
           <div className="flex items-center gap-2.5 pt-1 border-t border-slate-800/60">
             <div className="w-8 h-8 rounded-full bg-blue-600/90 flex items-center justify-center font-extrabold text-[10px] text-white uppercase border border-blue-500 shrink-0">
               {currentUserRole === 'CEO' && 'CEO'}
-              {currentUserRole === 'Accountant' && 'ACC'}
+              {currentUserRole === 'ChiefAccountant' && 'KTT'}
+              {currentUserRole === 'SiteAccountant' && 'KTCT'}
               {currentUserRole === 'SiteManager' && 'MGR'}
               {currentUserRole === 'Auditor' && 'AUD'}
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-[11px] text-white font-extrabold leading-none uppercase truncate">
                 {currentUserRole === 'CEO' && (companyConfig?.directorName || 'Đỗ Minh Tuấn')}
-                {currentUserRole === 'Accountant' && (companyConfig?.chiefAccountantName || 'Nguyễn T. Hà')}
+                {currentUserRole === 'ChiefAccountant' && (currentUserFullName || companyConfig?.chiefAccountantName || 'Kế toán trưởng')}
+                {currentUserRole === 'SiteAccountant' && (currentUserFullName || 'Kế toán công trường')}
                 {currentUserRole === 'SiteManager' && (currentUserFullName || 'Chỉ huy trưởng')}
                 {currentUserRole === 'Auditor' && 'Thanh Tra Khách'}
               </span>
               <span className="text-[8px] text-blue-400 uppercase tracking-wider font-bold mt-1">
                 {currentUserRole === 'CEO' && 'Giám đốc Điều hành'}
-                {currentUserRole === 'Accountant' && 'Kế toán trưởng'}
+                {currentUserRole === 'ChiefAccountant' && 'Kế toán trưởng'}
+                {currentUserRole === 'SiteAccountant' && 'Kế toán công trường'}
                 {currentUserRole === 'SiteManager' && 'Chỉ huy trưởng'}
                 {currentUserRole === 'Auditor' && 'Đoàn Thanh tra'}
               </span>
@@ -1430,7 +1456,8 @@ export default function App() {
               <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">
                 {currentUserFullName ? `${currentUserFullName} (` : ''}
                 {currentUserRole === 'CEO' && '💼 CEO / Giám Đốc'}
-                {currentUserRole === 'Accountant' && '🧮 Kế Toán Trưởng'}
+                {currentUserRole === 'ChiefAccountant' && '🧮 Kế Toán Trưởng'}
+                {currentUserRole === 'SiteAccountant' && '📒 Kế Toán Công Trường'}
                 {currentUserRole === 'SiteManager' && '🚧 Chỉ Huy Trưởng'}
                 {currentUserRole === 'Auditor' && '🔍 Thanh Tra / Khách'}
                 {currentUserFullName ? ')' : ''}
@@ -1486,22 +1513,22 @@ export default function App() {
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">DỰ ÁN LIÊN KẾT</p>
                   <h2 className="text-xl font-black text-slate-900 font-mono mt-1">{projects.length} Công trình</h2>
-                  <p className="text-[10px] text-slate-400 mt-1">Delta / Coteccons / Self-Perform</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Dữ liệu đồng bộ từ máy chủ</p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">LAO ĐỘNG QUẢN LÝ</p>
-                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">50 Nhân viên</h2>
+                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">{employees.length} Nhân viên</h2>
                   <p className="text-[10px] text-slate-400 mt-1">Quét QR & Định vị Geofencing</p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">NHÀ PHÂN PHỐI</p>
-                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">5 Đơn vị chính</h2>
-                  <p className="text-[10px] text-slate-400 mt-1">Kiểm toán công nợ 100%</p>
+                  <h2 className="text-xl font-black text-slate-900 font-mono mt-1">{contractors.length} Đơn vị</h2>
+                  <p className="text-[10px] text-slate-400 mt-1">Đối tác và nhà thầu đang quản lý</p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm border-l-4 border-l-rose-500">
                   <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">TRẠNG THÁI VẬT TƯ</p>
-                  <h2 className="text-xl font-black text-rose-600 font-mono mt-1">Có Cảnh Báo</h2>
-                  <p className="text-[10px] text-rose-500 font-semibold mt-1">Xuất kho vượt dự toán</p>
+                  <h2 className={`text-xl font-black font-mono mt-1 ${materialLimits.some(item => item.actualIssuedQty > item.plannedQty) ? 'text-rose-600' : 'text-emerald-600'}`}>{materialLimits.some(item => item.actualIssuedQty > item.plannedQty) ? 'Có Cảnh Báo' : 'Bình thường'}</h2>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-1">Theo định mức vật tư hiện tại</p>
                 </div>
               </div>
             )}
@@ -1530,7 +1557,7 @@ export default function App() {
               )}
 
               {activeTab === 'projects' && (
-                <ProjectManager projects={projects} setProjects={securedSetProjectsCEO} role={currentUserRole} />
+                <ProjectManager projects={projects} setProjects={securedSetProjectsOperational} role={currentUserRole} />
               )}
 
               {activeTab === 'liabilities' && (
@@ -1563,10 +1590,6 @@ export default function App() {
                   approvals={approvals}
                   equipment={equipment}
                   timesheets={timesheets}
-                  onCheckIn={securedHandleCheckIn}
-                  onApproveLevel={securedHandleApproveLevel}
-                  onDispatchMachine={securedHandleDispatchMachine}
-                  onResetData={handleResetDataSecured}
                   userRole={currentUserRole}
                 />
               )}
@@ -1602,7 +1625,7 @@ export default function App() {
               {activeTab === 'warehouse' && (
                 <WarehouseManager
                   projects={projects}
-                  setProjects={securedSetProjectsCEO}
+                  setProjects={securedSetProjectsOperational}
                   inventoryItems={inventoryItems}
                   setInventoryItems={securedSetInventoryItems}
                   inventoryLedger={inventoryLedger}
@@ -1652,7 +1675,7 @@ export default function App() {
               {activeTab === 'equipment' && (
                 <EquipmentManager
                   projects={projects}
-                  setProjects={securedSetProjectsCEO}
+                  setProjects={securedSetProjectsOperational}
                   equipment={equipment}
                   setEquipment={securedSetEquipment}
                   transactions={transactions}
@@ -1671,7 +1694,7 @@ export default function App() {
             <footer className="pt-8 border-t border-slate-200 text-slate-400 text-xs flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 pb-6">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-semibold text-slate-500">Quản Trị Doanh Nghiệp • Hệ thống quản trị tập trung</span>
+                <span className="font-semibold text-slate-500">Quản trị doanh nghiệp • Hệ thống quản trị tập trung</span>
               </div>
               <div className="text-center sm:text-right text-[10px] space-y-0.5 font-medium text-slate-400">
                 <p>Hệ thống đạt chuẩn ACID kế toán | Kiểm soát thất thoát vật tư</p>
@@ -2089,31 +2112,6 @@ export default function App() {
               </p>
             </div>
             <div className="p-4 bg-slate-50 flex flex-col gap-2">
-              <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest text-center mb-1">
-                Chuyển đổi nhanh vai trò thử nghiệm:
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    setCurrentUserRole('CEO');
-                    setPermissionDeniedMsg(null);
-                  }}
-                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-800 rounded-lg shadow-3xs transition-colors flex flex-col items-center"
-                >
-                  <span className="font-extrabold">💼 CEO / Giám Đốc</span>
-                  <span className="text-[8px] text-slate-400 font-medium">Toàn bộ quyền hạn</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCurrentUserRole('Accountant');
-                    setPermissionDeniedMsg(null);
-                  }}
-                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-800 rounded-lg shadow-3xs transition-colors flex flex-col items-center"
-                >
-                  <span className="font-extrabold">🧮 Kế Toán Trưởng</span>
-                  <span className="text-[8px] text-slate-400 font-medium">Kế toán & Nhân sự</span>
-                </button>
-              </div>
               <button
                 onClick={() => setPermissionDeniedMsg(null)}
                 className="mt-2 w-full py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors shadow-3xs"

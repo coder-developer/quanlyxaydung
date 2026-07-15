@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch, type FormEvent, type ReactElement, type SetStateAction } from 'react';
-import { Building2, CalendarDays, Edit3, MapPin, Plus, Search, ShieldCheck, Wallet, X } from 'lucide-react';
+import { Building2, CalendarDays, Edit3, MapPin, Plus, Search, ShieldCheck, Trash2, Wallet, X } from 'lucide-react';
 import type { Project, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
 
@@ -41,7 +41,8 @@ const statusStyle: Record<Project['status'], string> = {
 const money = (value: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value || 0);
 
 export default function ProjectManager({ projects, setProjects, role }: Props) {
-  const canEdit = role === 'CEO';
+  const canCreateDelete = role === 'CEO';
+  const canEdit = role === 'CEO' || role === 'SiteManager';
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'all' | Project['status']>('all');
   const [formOpen, setFormOpen] = useState(false);
@@ -78,11 +79,18 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
     setError('');
   };
 
+  const removeProject = (project: Project) => {
+    if (!canCreateDelete || !window.confirm(`Xóa dự án ${project.name}? Hợp đồng, giao dịch, chấm công và dữ liệu liên quan sẽ được xử lý đồng bộ.`)) return;
+    setProjects(current => current.filter(item => item.id !== project.id));
+    setNotice('Đã xóa dự án và đang dọn dữ liệu liên quan.');
+    window.setTimeout(() => setNotice(''), 2500);
+  };
+
   const update = <K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) => setForm(current => ({ ...current, [key]: value }));
 
   const save = (event: FormEvent) => {
     event.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || (!editingId && !canCreateDelete)) return;
     const rawCode = String(form.code || '').trim();
     const code = normalizeBusinessId(rawCode, 'DA-001');
     const name = form.name.trim();
@@ -111,7 +119,12 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
       setError('Tọa độ công trường nằm ngoài phạm vi hợp lệ.');
       return;
     }
-    const values: ProjectForm = { ...form, code, name, location, manager: form.manager.trim(), geofenceRadius: Math.max(50, Number(form.geofenceRadius || 200)) };
+    let values: ProjectForm = { ...form, code, name, location, manager: form.manager.trim(), geofenceRadius: Math.max(50, Number(form.geofenceRadius || 200)) };
+    if (role === 'SiteManager' && editingId) {
+      const current = projects.find(project => project.id === editingId);
+      if (!current) return;
+      values = { ...values, code: current.code, manager: current.manager, budget: current.budget, spent: current.spent };
+    }
     if (editingId) {
       setProjects(current => current.map(project => project.id === editingId ? { ...project, ...values } : project));
       setNotice('Đã cập nhật dự án và chờ đồng bộ.');
@@ -133,7 +146,7 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
           <div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-blue-600"/><h2 className="text-lg font-black text-slate-900">Danh sách dự án</h2></div>
           <p className="mt-1 text-xs text-slate-500">Quản lý hồ sơ công trường, ngân sách, tiến độ và vùng chấm công.</p>
         </div>
-        {canEdit ? <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Plus className="h-4 w-4"/>Thêm dự án mới</button> : <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600"><ShieldCheck className="h-4 w-4"/>Chế độ chỉ xem</span>}
+        {canCreateDelete ? <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Plus className="h-4 w-4"/>Thêm dự án mới</button> : <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600"><ShieldCheck className="h-4 w-4"/>{canEdit ? 'Quản lý dự án được bổ nhiệm' : 'Chế độ chỉ xem'}</span>}
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-[1fr_220px]">
         <label className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm mã, tên, địa điểm, chỉ huy trưởng..." className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500"/></label>
@@ -141,7 +154,7 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
       </div>
     </section>
 
-    {showForm && <ProjectFormPanel form={form} editing={Boolean(editingId)} error={error} onUpdate={update} onSave={save} onClose={closeForm}/>}
+    {showForm && <ProjectFormPanel form={form} editing={Boolean(editingId)} managerMode={role === 'SiteManager'} error={error} onUpdate={update} onSave={save} onClose={closeForm}/>}
 
     <div className="grid gap-4 xl:grid-cols-2">
       {filtered.map(project => <article key={project.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -153,7 +166,7 @@ export default function ProjectManager({ projects, setProjects, role }: Props) {
           <Info icon={<CalendarDays/>} label="Thời gian" value={`${project.startDate} → ${project.endDate}`}/>
         </div>
         <div className="mt-4"><div className="mb-1.5 flex justify-between text-[10px] font-bold text-slate-500"><span>TIẾN ĐỘ</span><span>{project.progress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, project.progress))}%` }}/></div></div>
-        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span>Đã chi: <b className="text-slate-800">{money(project.spent)}</b></span>{canEdit && <button onClick={() => openEdit(project)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-blue-700 hover:bg-blue-50"><Edit3 className="h-3.5 w-3.5"/>Chỉnh sửa</button>}</div>
+        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span>Đã chi: <b className="text-slate-800">{money(project.spent)}</b></span>{canEdit && <div className="flex gap-2"><button onClick={() => openEdit(project)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-blue-700 hover:bg-blue-50"><Edit3 className="h-3.5 w-3.5"/>Chỉnh sửa</button>{canCreateDelete && <button onClick={() => removeProject(project)} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 font-bold text-rose-700 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5"/>Xóa</button>}</div>}</div>
       </article>)}
     </div>
     {filtered.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-500">Không tìm thấy dự án phù hợp.</div>}
@@ -164,19 +177,19 @@ function Info({ icon, label, value }: { icon: ReactElement; label: string; value
   return <div className="rounded-xl bg-slate-50 p-3"><div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">{icon && <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}{label}</div><div className="mt-1 font-bold text-slate-700">{value}</div></div>;
 }
 
-function ProjectFormPanel({ form, editing, error, onUpdate, onSave, onClose }: { form: ProjectForm; editing: boolean; error: string; onUpdate: <K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) => void; onSave: (event: FormEvent) => void; onClose: () => void }) {
+function ProjectFormPanel({ form, editing, managerMode, error, onUpdate, onSave, onClose }: { form: ProjectForm; editing: boolean; managerMode: boolean; error: string; onUpdate: <K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) => void; onSave: (event: FormEvent) => void; onClose: () => void }) {
   const number = (value: string) => value === '' ? 0 : Number(value);
   return <form onSubmit={onSave} className="rounded-2xl border border-blue-200 bg-white p-5 shadow-lg">
     <div className="flex items-center justify-between"><div><h3 className="font-black text-slate-900">{editing ? 'Chỉnh sửa dự án' : 'Thêm dự án mới'}</h3><p className="text-xs text-slate-500">Các thay đổi sẽ tự động đồng bộ tới các thiết bị đăng nhập.</p></div><button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5"/></button></div>
     {error && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-700">{error}</div>}
     <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <Field label="Mã dự án *"><input value={form.code || ''} onChange={e => onUpdate('code', e.target.value)} placeholder="DA-006"/></Field>
+      <Field label="Mã dự án *"><input disabled={managerMode} value={form.code || ''} onChange={e => onUpdate('code', e.target.value)} placeholder="DA-006"/></Field>
       <Field label="Tên dự án *" wide><input value={form.name} onChange={e => onUpdate('name', e.target.value)} placeholder="Tên công trình / dự án"/></Field>
       <Field label="Trạng thái"><select value={form.status} onChange={e => onUpdate('status', e.target.value as Project['status'])}>{Object.entries(statusLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
       <Field label="Địa điểm *" wide><input value={form.location} onChange={e => onUpdate('location', e.target.value)} placeholder="Địa chỉ công trường"/></Field>
-      <Field label="Chỉ huy trưởng"><input value={form.manager} onChange={e => onUpdate('manager', e.target.value)} placeholder="Họ tên người phụ trách"/></Field>
-      <Field label="Ngân sách (VND)"><input type="number" min="0" value={form.budget} onChange={e => onUpdate('budget', number(e.target.value))}/></Field>
-      <Field label="Chi phí đã dùng (VND)"><input type="number" min="0" value={form.spent} onChange={e => onUpdate('spent', number(e.target.value))}/></Field>
+      <Field label="Chỉ huy trưởng"><input disabled={managerMode} value={form.manager} onChange={e => onUpdate('manager', e.target.value)} placeholder="Họ tên người phụ trách"/></Field>
+      <Field label="Ngân sách (VND)"><input disabled={managerMode} type="number" min="0" value={form.budget} onChange={e => onUpdate('budget', number(e.target.value))}/></Field>
+      <Field label="Chi phí đã dùng (VND)"><input disabled={managerMode} type="number" min="0" value={form.spent} onChange={e => onUpdate('spent', number(e.target.value))}/></Field>
       <Field label="Tiến độ (%)"><input type="number" min="0" max="100" value={form.progress} onChange={e => onUpdate('progress', number(e.target.value))}/></Field>
       <Field label="Ngày khởi công *"><input type="date" value={form.startDate} onChange={e => onUpdate('startDate', e.target.value)}/></Field>
       <Field label="Ngày kết thúc *"><input type="date" value={form.endDate} onChange={e => onUpdate('endDate', e.target.value)}/></Field>

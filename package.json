@@ -1,7 +1,7 @@
 {
   "name": "quan-ly-xay-dung",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -50,7 +50,7 @@
   "main": "desktop/main.cjs",
   "build": {
     "appId": "vn.constructos.erp",
-    "productName": "Quản Trị Doanh Nghiệp",
+    "productName": "Quản trị doanh nghiệp",
     "files": ["desktop/**/*"],
     "win": { "target": "portable", "artifactName": "Quan-Tri-Doanh-Nghiep-Windows-${version}.exe" },
     "directories": { "output": "release/windows" }

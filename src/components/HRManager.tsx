@@ -68,6 +68,7 @@ export default function HRManager({
   globalSearchQuery,
   userRole
 }: HRManagerProps) {
+  const isSiteManager = userRole === 'SiteManager';
   // State managers
   const [hrSubTab, setHrSubTab] = useState<'employees' | 'attendance' | 'payroll' | 'contracts' | 'schedule'>('employees');
   const [searchTerm, setSearchTerm] = useState('');
@@ -248,6 +249,10 @@ export default function HRManager({
   // Handle Employee Add/Edit
   const handleSaveEmployee = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSiteManager && editingEmp) {
+      showToast('Chỉ huy trưởng chỉ được thêm nhân sự mới cho công trường mình quản lý.');
+      return;
+    }
     if (!newEmp.name || !newEmp.role || !newEmp.phone) {
       showToast('Vui lòng điền đầy đủ các trường thông tin bắt buộc.');
       return;
@@ -267,7 +272,13 @@ export default function HRManager({
       const createdEmp: Employee = {
         id: employeeCode,
         ...newEmp,
-        code: employeeCode
+        code: employeeCode,
+        ...(isSiteManager ? {
+          role: 'Nhân viên công trường',
+          projectId: projects[0]?.id || '',
+          baseSalary: 0,
+          active: true,
+        } : {}),
       };
       setEmployees(prev => [createdEmp, ...prev]);
       showToast(`Đã thêm mới nhân viên ${newEmp.name} (Mã số: ${employeeCode}) thành công.`);
@@ -1217,7 +1228,7 @@ export default function HRManager({
         </table>
 
         <br><br>
-        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán nhân sự ${companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'} &bull; Ngày xuất file: ${reportDateStr}</div>
+        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán nhân sự ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'} &bull; Ngày xuất file: ${reportDateStr}</div>
       </body>
       </html>
     `;
@@ -1766,11 +1777,11 @@ export default function HRManager({
                 setEditingEmp(null);
                 setNewEmp({
                   name: '',
-                  role: '',
+                  role: isSiteManager ? 'Nhân viên công trường' : '',
                   type: 'Internal',
                   projectId: projects[0]?.id || '',
                   phone: '',
-                  baseSalary: 15000000,
+                  baseSalary: isSiteManager ? 0 : 15000000,
                   active: true,
                   citizenId: '',
                   permanentAddress: ''
@@ -1884,13 +1895,13 @@ export default function HRManager({
                           </button>
                           <button
                             onClick={() => handleEditEmpClick(emp)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] transition-all"
+                            className={`px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] transition-all ${isSiteManager ? 'hidden' : ''}`}
                           >
                             Sửa
                           </button>
                           <button
                             onClick={() => handleDeleteEmployee(emp.id, emp.name)}
-                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md font-bold text-[10px] transition-all"
+                            className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md font-bold text-[10px] transition-all ${isSiteManager ? 'hidden' : ''}`}
                           >
                             Xóa
                           </button>
@@ -2341,6 +2352,7 @@ export default function HRManager({
                   <input
                     type="text"
                     required
+                    readOnly={isSiteManager}
                     placeholder="Ví dụ: Kỹ sư cơ điện"
                     value={newEmp.role}
                     onChange={(e) => setNewEmp(prev => ({ ...prev, role: e.target.value }))}
@@ -2407,6 +2419,7 @@ export default function HRManager({
                   <label className="text-[10px] font-extrabold text-slate-400 uppercase">Bố trí công trình *</label>
                   <select
                     value={newEmp.projectId}
+                    disabled={isSiteManager}
                     onChange={(e) => setNewEmp(prev => ({ ...prev, projectId: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white focus:outline-none"
                   >
@@ -2417,7 +2430,7 @@ export default function HRManager({
                 </div>
               </div>
 
-              <div className="space-y-1">
+              {!isSiteManager && <div className="space-y-1">
                 <label className="text-[10px] font-extrabold text-slate-400 uppercase block">
                   Mức lương thỏa thuận (VND) *
                 </label>
@@ -2433,9 +2446,9 @@ export default function HRManager({
                     {newEmp.type === 'Internal' ? 'VND / Tháng' : 'VND / Ngày'}
                   </span>
                 </div>
-              </div>
+              </div>}
 
-              <div className="flex items-center gap-2 pt-2">
+              {!isSiteManager && <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
                   id="active-checkbox"
@@ -2446,7 +2459,13 @@ export default function HRManager({
                 <label htmlFor="active-checkbox" className="text-xs font-bold text-slate-700">
                   Nhân sự đang tích cực làm việc (Được phép chấm công)
                 </label>
-              </div>
+              </div>}
+
+              {isSiteManager && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                  Nhân sự mới được gắn vào công trường hiện tại, tạo tài khoản đăng nhập tự động và chưa có quyền khai báo mức lương.
+                </div>
+              )}
 
               <div className="flex gap-2 pt-4 border-t border-slate-100 justify-end">
                 <button

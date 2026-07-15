@@ -4,7 +4,7 @@ import { normalizeBusinessId } from '../lib/businessIds';
 import {
   Wrench, Truck, AlertCircle, Plus, ClipboardList, CheckCircle2,
   MapPin, HelpCircle, Activity, Gauge, Calendar, DollarSign, PenSquare,
-  FileSpreadsheet, Download
+  FileSpreadsheet, Download, Trash2
 } from 'lucide-react';
 
 interface EquipmentManagerProps {
@@ -61,6 +61,7 @@ export default function EquipmentManager({
   companyConfig,
   userRole
 }: EquipmentManagerProps) {
+  const canManageOperations = userRole === 'CEO' || userRole === 'SiteManager' || userRole === 'SiteAccountant';
   // Fuel log in-memory state
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([
     { id: 'f-1', equipmentId: 'eq-1', date: '2026-07-01', litersOrKw: 150, cost: 3500000, recordedBy: 'Kỹ sư Tú' },
@@ -183,9 +184,28 @@ export default function EquipmentManager({
     });
   }, [equipment, filterProject, filterType]);
 
+  const handleDeleteEquipment = (item: Equipment) => {
+    const hasOperationalHistory = fuelLogs.some(row => row.equipmentId === item.id)
+      || maintenanceLogs.some(row => row.equipmentId === item.id)
+      || dispatchLogs.some(row => row.equipmentId === item.id);
+    const message = hasOperationalHistory
+      ? `Thiết bị ${item.code || item.id} có lịch sử nhiên liệu, bảo trì hoặc điều động. Xóa sẽ dọn toàn bộ nhật ký vận hành liên quan. Bạn có chắc chắn?`
+      : `Xóa thiết bị ${item.code || item.id} - ${item.name}?`;
+    if (!window.confirm(message)) return;
+
+    const remaining = equipment.filter(row => row.id !== item.id);
+    setEquipment(remaining);
+    setFuelLogs(rows => rows.filter(row => row.equipmentId !== item.id));
+    setMaintenanceLogs(rows => rows.filter(row => row.equipmentId !== item.id));
+    setDispatchLogs(rows => rows.filter(row => row.equipmentId !== item.id));
+    setSelectedEquipId(current => current === item.id ? remaining[0]?.id || '' : current);
+    showToast(`Đã xóa thiết bị ${item.code || item.id} và nhật ký vận hành liên quan.`);
+  };
+
   // Handle Dispatching Equipment
   const handleDispatch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || !dispatchTargetProjId) return;
 
     const eq = equipment.find(e => e.id === selectedEquipId);
@@ -255,6 +275,7 @@ export default function EquipmentManager({
   // Handle Logging Fuel / Electricity
   const handleLogFuel = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || newFuelCost <= 0) return;
 
     const eq = equipment.find(e => e.id === selectedEquipId);
@@ -313,6 +334,7 @@ export default function EquipmentManager({
   // Handle Logging Maintenance
   const handleLogMaint = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageOperations) { showToast('Tài khoản hiện tại chỉ được xem thiết bị.'); return; }
     if (!selectedEquipId || newMaintCost <= 0) return;
 
     const eq = equipment.find(e => e.id === selectedEquipId);
@@ -825,6 +847,7 @@ export default function EquipmentManager({
   // Handle procuring (buying/renting) new equipment or tool
   const handleProcure = (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole !== 'CEO') { showToast('Chỉ Giám đốc được thêm, mua hoặc thuê thiết bị mới.'); return; }
     if (!procureName || procureCost <= 0 || !procureProject) {
       alert('Vui lòng điền đầy đủ Tên thiết bị, Chi phí và Dự án áp dụng!');
       return;
@@ -951,18 +974,30 @@ export default function EquipmentManager({
           >
             LOGS NHIÊN LIỆU & BẢO TRÌ
           </button>
-          <button
-            onClick={() => setActiveTab('procurement')}
-            className={`px-4 py-2 rounded-md text-xs font-black transition-all ${
-              activeTab === 'procurement' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            MUA SẮM / THUÊ MỚI
-          </button>
+          {userRole === 'CEO' && (
+            <button
+              onClick={() => setActiveTab('procurement')}
+              className={`px-4 py-2 rounded-md text-xs font-black transition-all ${
+                activeTab === 'procurement' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              THÊM / MUA / THUÊ THIẾT BỊ
+            </button>
+          )}
         </div>
 
         {activeTab === 'directory' && (
           <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-500 w-full sm:w-auto">
+            {userRole === 'CEO' && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('procurement')}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white hover:bg-blue-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Thêm thiết bị
+              </button>
+            )}
             <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
               <span className="whitespace-nowrap">Dự án:</span>
               <select
@@ -1056,7 +1091,7 @@ export default function EquipmentManager({
                           {eq.status === 'Available' ? 'Sẵn sàng' : (eq.status === 'In-Use' ? 'Đang thi công' : 'Bảo dưỡng')}
                         </span>
 
-                        <button
+                        {canManageOperations && <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedEquipId(eq.id);
@@ -1066,7 +1101,21 @@ export default function EquipmentManager({
                         >
                           <Truck className="w-3 h-3" />
                           Điều động
-                        </button>
+                        </button>}
+                        {userRole === 'CEO' && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteEquipment(eq);
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-rose-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50"
+                            title={`Xóa thiết bị ${eq.code || eq.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Xóa
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

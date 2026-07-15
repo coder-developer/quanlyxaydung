@@ -43,10 +43,11 @@ export async function migrate() {
     CREATE TABLE IF NOT EXISTS workforce_requests (
       id UUID PRIMARY KEY,
       employee_id TEXT NOT NULL,
-      request_type TEXT NOT NULL CHECK (request_type IN ('leave','overtime','business_trip','shift_swap')),
+      request_type TEXT NOT NULL CHECK (request_type IN ('leave','overtime','business_trip','shift_swap','salary_advance')),
       start_at TIMESTAMPTZ NOT NULL,
       end_at TIMESTAMPTZ NOT NULL,
       reason TEXT NOT NULL,
+      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
       reviewed_by BIGINT REFERENCES app_users(id),
       review_note TEXT,
@@ -99,11 +100,46 @@ export async function migrate() {
       window_started TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       locked_until TIMESTAMPTZ
     );
-    INSERT INTO erp_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+    CREATE TABLE IF NOT EXISTS erp_state_backups (
+      id BIGSERIAL PRIMARY KEY,
+      revision BIGINT NOT NULL,
+      payload JSONB NOT NULL,
+      created_by BIGINT REFERENCES app_users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO erp_state (id,payload) VALUES (1, jsonb_build_object(
+      'companyConfig', jsonb_build_object(
+        'companyName','Công Ty Cổ Phần Xây Dựng','siteOffice','Tp Hồ Chí Minh','directorName','','chiefAccountantName','','treasurerName','','technicianName','',
+        'journalTitle','SỔ NHẬT KÝ CHUNG','dispatchTitle','LỆNH ĐIỀU ĐỘNG THIẾT BỊ','fuelTitle','PHIẾU CẤP PHÁT NHIÊN LIỆU','maintenanceTitle','BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+        'appTitle','Quản trị doanh nghiệp','siteManagerApprovalLimit',50000000,'accountantApprovalLimit',200000000,'fuelVarianceThreshold',5,'maxDailyWorkHours',12,'requireDoubleApproval',true
+      ),
+      'projects','[]'::jsonb,'employees','[]'::jsonb,'contractors','[]'::jsonb,'contracts','[]'::jsonb,'inventoryItems','[]'::jsonb,'materialLimits','[]'::jsonb,
+      'inventoryLedger','[]'::jsonb,'timesheets','[]'::jsonb,'equipment','[]'::jsonb,'approvals','[]'::jsonb,'transactions','[]'::jsonb,'laborContracts','[]'::jsonb,'constructionTasks','[]'::jsonb
+    )) ON CONFLICT (id) DO NOTHING;
+    UPDATE erp_state
+    SET payload=jsonb_set(payload,'{companyConfig,appTitle}',to_jsonb('Quản trị doanh nghiệp'::text),true)
+    WHERE COALESCE(payload#>>'{companyConfig,appTitle}','') IN ('','Quản Trị Doanh Nghiệp','CONSTRUCT-OS');
+    UPDATE erp_state
+    SET payload=jsonb_set(payload,'{companyConfig,companyName}',to_jsonb('Công Ty Cổ Phần Xây Dựng'::text),true)
+    WHERE COALESCE(payload#>>'{companyConfig,companyName}','') IN ('','CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT');
+    UPDATE erp_state
+    SET payload=jsonb_set(payload,'{companyConfig,siteOffice}',to_jsonb('Tp Hồ Chí Minh'::text),true)
+    WHERE COALESCE(payload#>>'{companyConfig,siteOffice}','')='' OR LOWER(payload#>>'{companyConfig,siteOffice}') LIKE '%dã chiến%';
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS employee_id TEXT;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS must_change_pin BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE workforce_requests ADD COLUMN IF NOT EXISTS amount NUMERIC(18,2) NOT NULL DEFAULT 0;
+    ALTER TABLE workforce_requests DROP CONSTRAINT IF EXISTS workforce_requests_request_type_check;
+    ALTER TABLE workforce_requests ADD CONSTRAINT workforce_requests_request_type_check CHECK (request_type IN ('leave','overtime','business_trip','shift_swap','salary_advance'));
+    WITH duplicate_links AS (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY employee_id ORDER BY active DESC, id) AS link_order
+      FROM app_users WHERE employee_id IS NOT NULL
+    )
+    UPDATE app_users SET employee_id=NULL,session_version=session_version+1
+    WHERE id IN (SELECT id FROM duplicate_links WHERE link_order > 1);
+    CREATE UNIQUE INDEX IF NOT EXISTS app_users_employee_id_unique ON app_users(employee_id) WHERE employee_id IS NOT NULL;
     ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
-    ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('CEO','Accountant','SiteManager','Auditor','Employee'));
+    UPDATE app_users SET role='ChiefAccountant',session_version=session_version+1 WHERE role='Accountant';
+    ALTER TABLE app_users ADD CONSTRAINT app_users_role_check CHECK (role IN ('CEO','ChiefAccountant','SiteAccountant','SiteManager','Auditor','Employee'));
   `);
 }

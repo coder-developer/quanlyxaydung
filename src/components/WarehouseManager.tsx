@@ -17,7 +17,8 @@ import {
   TrendingDown,
   Printer,
   Download,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { InventoryItem, InventoryLedger, MaterialLimit, Project, FinancialTransaction, CompanyConfig, UserRole } from '../types';
 import { normalizeBusinessId } from '../lib/businessIds';
@@ -53,6 +54,7 @@ export default function WarehouseManager({
   companyConfig,
   userRole
 }: WarehouseManagerProps) {
+  const canManageOperations = userRole === 'CEO' || userRole === 'SiteManager' || userRole === 'SiteAccountant';
   const [warehouseTab, setWarehouseTab] = useState<'stock' | 'transaction' | 'ledger'>('stock');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -142,6 +144,26 @@ export default function WarehouseManager({
     showToast(`Đã thêm mã vật tư mới thành công: ${newItem.name} (${generatedCode})`);
     setShowAddItemModal(false);
     setNewItem({ code: '', name: '', unit: '', avgCost: 100000, initialQty: 0 });
+  };
+
+  const handleDeleteItem = (item: InventoryItem) => {
+    const relatedLedgerIds = new Set(
+      inventoryLedger.filter(row => row.itemId === item.id).map(row => row.id),
+    );
+    const relatedLimitCount = materialLimits.filter(row => row.itemId === item.id).length;
+    const message = relatedLedgerIds.size || relatedLimitCount || item.onHand !== 0
+      ? `Vật tư ${item.code || item.id} đang có tồn kho hoặc dữ liệu nhập/xuất, định mức liên quan. Xóa sẽ dọn toàn bộ dữ liệu này. Bạn có chắc chắn?`
+      : `Xóa vật tư ${item.code || item.id} - ${item.name}?`;
+    if (!window.confirm(message)) return;
+
+    const remainingItems = inventoryItems.filter(row => row.id !== item.id);
+    setInventoryItems(remainingItems);
+    setInventoryLedger(rows => rows.filter(row => row.itemId !== item.id));
+    setMaterialLimits(rows => rows.filter(row => row.itemId !== item.id));
+    setTransactions(rows => rows.filter(row => !row.referenceId || !relatedLedgerIds.has(row.referenceId)));
+    setVoucher(current => current.itemId === item.id ? { ...current, itemId: remainingItems[0]?.id || '' } : current);
+    if (selectedItemFilter === item.id) setSelectedItemFilter('all');
+    showToast(`Đã xóa vật tư ${item.code || item.id} và dữ liệu kho liên quan.`);
   };
 
   // Export Warehouse Voucher to Excel (Blank signatures)
@@ -276,7 +298,7 @@ export default function WarehouseManager({
         </table>
 
         <br><br>
-        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán ${companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'} &bull; Ngày xuất báo cáo: ${reportDateStr}</div>
+        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'} &bull; Ngày xuất báo cáo: ${reportDateStr}</div>
       </body>
       </html>
     `;
@@ -295,6 +317,10 @@ export default function WarehouseManager({
   // Post Receipt / Issue Voucher
   const handlePostVoucher = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageOperations) {
+      showToast('Tài khoản hiện tại chỉ được xem dữ liệu kho vật tư.');
+      return;
+    }
     const item = inventoryItems.find(i => i.id === voucher.itemId);
     if (!item) {
       showToast('Vật tư không hợp lệ.');
@@ -509,7 +535,7 @@ export default function WarehouseManager({
       </head>
       <body>
         <div style="font-weight: bold; text-transform: uppercase; font-size: 10pt;">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</div>
-        <div style="font-size: 9pt; color: #64748b;">Hệ thống Kiểm soát Chống thất thoát vật tư - ${companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}</div>
+        <div style="font-size: 9pt; color: #64748b;">Hệ thống Kiểm soát Chống thất thoát vật tư - ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'}</div>
         <br>
         <div class="title">SỔ ĐỐI CHIẾU & NHẬT KÝ CHI TIẾT NHẬP XUẤT KHO VẬT TƯ</div>
         <div style="text-align: center; font-style: italic; font-size: 10pt; margin-bottom: 20px;">Thời điểm kết xuất: ${reportDateStr}</div>
@@ -628,13 +654,15 @@ export default function WarehouseManager({
               />
             </div>
 
-            <button
-              onClick={() => setShowAddItemModal(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Đăng Ký Mã Vật Tư</span>
-            </button>
+            {userRole === 'CEO' && (
+              <button
+                onClick={() => setShowAddItemModal(true)}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm Vật Tư</span>
+              </button>
+            )}
           </div>
 
           {/* Catalog items list */}
@@ -655,6 +683,7 @@ export default function WarehouseManager({
                     <th className="px-4 py-3 text-right bg-blue-50/50 text-blue-900">TỒN KHO THỰC TẾ</th>
                     <th className="px-4 py-3 text-right">Đơn giá mua bình quân</th>
                     <th className="px-4 py-3 text-right">Tổng giá trị tồn kho</th>
+                    {userRole === 'CEO' && <th className="px-4 py-3 text-center">Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -674,6 +703,19 @@ export default function WarehouseManager({
                         <td className="px-4 py-3 text-right font-mono text-slate-800 font-bold">
                           {formatVND(item.onHand * item.avgCost)}
                         </td>
+                        {userRole === 'CEO' && (
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(item)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                              title={`Xóa vật tư ${item.code || item.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Xóa
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                 </tbody>

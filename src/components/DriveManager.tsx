@@ -5,6 +5,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
+  browserSessionPersistence,
+  setPersistence,
   User,
   signOut
 } from 'firebase/auth';
@@ -57,11 +59,14 @@ interface Breadcrumb {
 // Ensure Firebase is initialized
 const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(firebaseApp);
+const DRIVE_TOKEN_KEY = 'erp_drive_access_token';
+const DRIVE_TOKEN_EXPIRY_KEY = 'erp_drive_access_token_expiry';
+const readCachedDriveToken = () => Number(sessionStorage.getItem(DRIVE_TOKEN_EXPIRY_KEY) || 0) > Date.now() ? sessionStorage.getItem(DRIVE_TOKEN_KEY) : null;
 
 export default function DriveManager({ projects, backupData }: DriveManagerProps) {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(() => readCachedDriveToken());
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [needsAuth, setNeedsAuth] = useState(true);
 
@@ -126,6 +131,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
     provider.addScope('https://www.googleapis.com/auth/drive.file');
 
     try {
+      await setPersistence(auth, browserSessionPersistence);
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const token = credential?.accessToken;
@@ -135,6 +141,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
       }
 
       setAccessToken(token);
+      sessionStorage.setItem(DRIVE_TOKEN_KEY, token);
+      sessionStorage.setItem(DRIVE_TOKEN_EXPIRY_KEY, String(Date.now() + 50 * 60_000));
       setNeedsAuth(false);
       setToast({ type: 'success', message: 'Kết nối Google Drive thành công!' });
     } catch (error: any) {
@@ -153,6 +161,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
     try {
       await signOut(auth);
       setAccessToken(null);
+      sessionStorage.removeItem(DRIVE_TOKEN_KEY);
+      sessionStorage.removeItem(DRIVE_TOKEN_EXPIRY_KEY);
       setUser(null);
       setNeedsAuth(true);
       setFiles([]);
@@ -187,6 +197,8 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
           // Token expired, force re-auth
           setNeedsAuth(true);
           setAccessToken(null);
+          sessionStorage.removeItem(DRIVE_TOKEN_KEY);
+          sessionStorage.removeItem(DRIVE_TOKEN_EXPIRY_KEY);
           throw new Error('Phiên làm việc hết hạn. Vui lòng đăng nhập lại Google Drive.');
         }
         throw new Error(`Truy vấn Drive thất bại: ${response.statusText}`);
@@ -381,9 +393,9 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
     setUploadProgress('Đang thiết lập cấu trúc thư mục lưu trữ ERP...');
 
     try {
-      // 1. Create Root "CONSTRUCT_OS_RECORDS" Folder
+      // Tạo thư mục gốc lưu trữ tài liệu của ứng dụng.
       const rootMeta = {
-        name: 'CONSTRUCT_OS_RECORDS',
+        name: 'QUAN_TRI_DOANH_NGHIEP',
         mimeType: 'application/vnd.google-apps.folder'
       };
 
@@ -439,7 +451,7 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
 
       setToast({ type: 'success', message: 'Khởi tạo cấu trúc lưu trữ ERP thành công!' });
       setCurrentFolderId(rootFolder.id);
-      setBreadcrumbs([{ id: 'root', name: 'My Drive' }, { id: rootFolder.id, name: 'CONSTRUCT_OS_RECORDS' }]);
+      setBreadcrumbs([{ id: 'root', name: 'My Drive' }, { id: rootFolder.id, name: 'QUAN_TRI_DOANH_NGHIEP' }]);
     } catch (error: any) {
       console.error(error);
       setToast({ type: 'error', message: error.message || 'Thất bại khi khởi tạo cây lưu trữ.' });
@@ -495,62 +507,13 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
   // SIGN IN COMPONENT
   if (needsAuth) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm max-w-2xl mx-auto my-8">
-        <div className="p-8 border-b border-slate-100 bg-slate-50 text-center relative overflow-hidden">
-          {/* Subtle tech background shapes */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -z-10"></div>
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -z-10"></div>
-
-          <div className="w-16 h-16 bg-blue-50 rounded-2xl text-blue-600 flex items-center justify-center mx-auto mb-4 shadow-3xs border border-blue-100">
-            <Cloud className="w-8 h-8 animate-pulse" />
-          </div>
-          <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-            Kết Nối Lưu Trữ Đám Mây Google Drive
-          </h2>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-2 leading-relaxed">
-            Đồng bộ hồ sơ nghiệm thu, bản vẽ thiết kế kỹ thuật và ảnh chụp công trường trực tiếp từ Google Drive của doanh nghiệp với chuẩn bảo mật OAuth 2.0.
-          </p>
-        </div>
-
-        <div className="p-8 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
-              <div className="flex items-center gap-2 text-slate-700 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Quản lý thư mục
-              </div>
-              <p className="text-slate-500 leading-normal">Tự động cấu trúc cây thư mục hồ sơ theo mã dự án Coteccons/Delta.</p>
-            </div>
-
-            <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
-              <div className="flex items-center gap-2 text-slate-700 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Tải tệp đa năng
-              </div>
-              <p className="text-slate-500 leading-normal">Hỗ trợ kéo thả trực tiếp tệp bản vẽ CAD, ảnh chụp thi công JPEG, PDF nghiệm thu.</p>
-            </div>
-
-            <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
-              <div className="flex items-center gap-2 text-slate-700 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Xóa bảo mật tuyệt đối
-              </div>
-              <p className="text-slate-500 leading-normal">Cơ chế xác thực 2 lớp chống xóa nhầm dữ liệu pháp lý của dự án.</p>
-            </div>
-
-            <div className="p-4 border border-slate-100 rounded-xl bg-slate-50/50 space-y-1">
-              <div className="flex items-center gap-2 text-slate-700 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Độc lập thiết bị
-              </div>
-                <p className="text-slate-500 leading-normal">Truy cập dữ liệu trực tiếp tại văn phòng chính hoặc trên thiết bị di động tại hiện trường.</p>
-            </div>
-          </div>
-
-          <div className="flex justify-center pt-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-8 p-7 text-center">
+          <div className="w-14 h-14 bg-blue-50 rounded-2xl text-blue-600 flex items-center justify-center mx-auto mb-4 border border-blue-100"><Cloud className="w-7 h-7" /></div>
+          <h2 className="text-base font-black text-slate-800">Kết nối Google Drive</h2>
+          <p className="text-xs text-slate-500 mt-2 mb-5">Ứng dụng chỉ yêu cầu quyền quản lý các tệp do ứng dụng tạo hoặc bạn lựa chọn. Phiên kết nối được giữ an toàn trong tab hiện tại.</p>
             <button
               onClick={handleSignIn}
-              className="gsi-material-button w-full sm:w-auto shadow-sm hover:shadow-md transition-shadow"
+              className="gsi-material-button w-full shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="gsi-material-button-state"></div>
               <div className="gsi-material-button-content-wrapper">
@@ -563,11 +526,9 @@ export default function DriveManager({ projects, backupData }: DriveManagerProps
                     <path fill="none" d="M0 0h48v48H0z"></path>
                   </svg>
                 </div>
-                <span className="gsi-material-button-contents font-bold text-slate-700">Đồng bộ qua tài khoản Google</span>
+                <span className="gsi-material-button-contents font-bold text-slate-700">Kết nối tài khoản Google</span>
               </div>
             </button>
-          </div>
-        </div>
       </div>
     );
   }

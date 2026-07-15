@@ -33,8 +33,8 @@ interface RegisteredUser {
 
 export default function LoginScreen({
   onLoginSuccess,
-  appTitle = 'Quản Trị Doanh Nghiệp',
-  companyName = 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'
+  appTitle = 'Quản trị doanh nghiệp',
+  companyName = 'Công Ty Cổ Phần Xây Dựng'
 }: LoginScreenProps) {
   const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
 
@@ -46,6 +46,7 @@ export default function LoginScreen({
 
   // Login states
   const [selectedRole, setSelectedRole] = useState<UserRole>('CEO');
+  const [loginUsername, setLoginUsername] = useState('');
   const [employeeUsername, setEmployeeUsername] = useState('');
   const [selectedUsername, setSelectedUsername] = useState<string>('');
   const [pin, setPin] = useState('');
@@ -96,13 +97,21 @@ export default function LoginScreen({
       color: 'border-l-blue-500 text-blue-600',
       badge: 'Toàn quyền Hệ thống'
     },
-    Accountant: {
+    ChiefAccountant: {
       name: 'Kế Toán Trưởng',
-      desc: 'Kiểm soát sổ sách kế toán, dòng tiền lương, công nợ & nhân sự',
+      desc: 'Duyệt chi, kiểm soát sổ sách và xem báo cáo tổng hợp',
       correctPin: '2222',
       icon: Users,
       color: 'border-l-indigo-500 text-indigo-600',
-      badge: 'Tài chính & Nhân sự'
+      badge: 'Kiểm soát Tài chính'
+    },
+    SiteAccountant: {
+      name: 'Kế Toán Công Trường',
+      desc: 'Nhập liệu và đề xuất chi cho dự án được phân công',
+      correctPin: '5555',
+      icon: Users,
+      color: 'border-l-violet-500 text-violet-600',
+      badge: 'Tài chính Dự án'
     },
     SiteManager: {
       name: 'Chỉ Huy Trưởng',
@@ -110,7 +119,7 @@ export default function LoginScreen({
       correctPin: '3333',
       icon: HardHat,
       color: 'border-l-emerald-500 text-emerald-600',
-      badge: 'Tác chiến Công trường'
+      badge: 'Điều hành Công trường'
     },
     Auditor: {
       name: 'Thanh Tra / Khách',
@@ -133,13 +142,36 @@ export default function LoginScreen({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    if (!serverMode) {
+      setErrorMsg('Chế độ đăng nhập cục bộ đã bị vô hiệu hóa để bảo đảm RBAC. Vui lòng kết nối backend máy chủ.');
+      return;
+    }
+
+    const username = loginUsername.trim().toLowerCase();
+    if (!username) {
+      setErrorMsg('Vui lòng nhập tên đăng nhập.');
+      return;
+    }
+    try {
+      const { user } = await apiLogin(username, pin);
+      if (user.mustChangePassword) {
+        setPendingPasswordUser(user);
+        setCurrentDefaultPassword(pin);
+        setPin('');
+        return;
+      }
+      onLoginSuccess(user.role, user.fullName, user.employeeId);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
+    }
+    return;
 
     if (loginType === 'default') {
       const config = roleConfig[selectedRole];
       if (serverMode) {
-        const usernames: Record<Exclude<UserRole, 'Employee' | 'SiteManager'>, string> = { CEO: 'ceo', Accountant: 'ketoan', Auditor: 'kiemtoan' };
-        const personalRole = selectedRole === 'Employee' || selectedRole === 'SiteManager';
-        const username = personalRole ? employeeUsername.trim().toLowerCase() : usernames[selectedRole];
+        const usernames: Partial<Record<UserRole, string>> = { CEO: 'ceo', ChiefAccountant: 'ketoan', Auditor: 'kiemtoan' };
+        const personalRole = selectedRole === 'Employee' || selectedRole === 'SiteManager' || selectedRole === 'SiteAccountant';
+        const username = personalRole ? employeeUsername.trim().toLowerCase() : usernames[selectedRole] || '';
         if (!username) {
           setErrorMsg('Vui lòng nhập tên đăng nhập nhân viên.');
           return;
@@ -210,6 +242,10 @@ export default function LoginScreen({
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    if (!serverMode) {
+      setErrorMsg('Đăng ký tài khoản chỉ hoạt động khi kết nối backend máy chủ.');
+      return;
+    }
 
     // Validation
     const cleanUsername = regUsername.trim().toLowerCase();
@@ -316,7 +352,7 @@ export default function LoginScreen({
       <div className="w-full max-w-xl bg-slate-850/90 border border-slate-750 rounded-2xl shadow-2xl p-6 md:p-8 relative z-10 backdrop-blur-md animate-fade-in" id="login-card">
         {/* Logo / Header block */}
         <div className="text-center mb-6">
-          <img src="/app-avatar-192.png" alt="Biểu tượng Quản Trị Doanh Nghiệp" className="inline-block w-16 h-16 rounded-2xl object-cover mb-3 shadow-xl shadow-blue-500/20 ring-1 ring-white/10" />
+          <img src="/app-avatar-192.png" alt="Biểu tượng Quản trị doanh nghiệp" className="inline-block w-16 h-16 rounded-2xl object-cover mb-3 shadow-xl shadow-blue-500/20 ring-1 ring-white/10" />
           <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white mb-1">
             {appTitle}
           </h2>
@@ -384,7 +420,7 @@ export default function LoginScreen({
 
             <form onSubmit={handleLogin} className="space-y-5">
               {/* Type 1: Default Role-based Grid */}
-              {loginType === 'default' && (
+              {!serverMode && loginType === 'default' && (
                 <div className="space-y-2">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                     Chọn vai trò tác nghiệp
@@ -440,20 +476,20 @@ export default function LoginScreen({
                 </div>
               )}
 
-              {serverMode && loginType === 'default' && (selectedRole === 'Employee' || selectedRole === 'SiteManager') && (
+              {serverMode && loginType === 'default' && (
                 <div className="space-y-2">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                    {selectedRole === 'SiteManager' ? 'Tên đăng nhập Chỉ huy trưởng' : 'Tên đăng nhập nhân viên'}
+                    Tên đăng nhập
                   </label>
                   <input
                     type="text"
                     autoComplete="username"
-                    value={employeeUsername}
+                    value={loginUsername}
                     onChange={(event) => {
-                      setEmployeeUsername(event.target.value);
+                      setLoginUsername(event.target.value);
                       setErrorMsg(null);
                     }}
-                    placeholder="Ví dụ: nv-001"
+                    placeholder="Tên đăng nhập hoặc mã nhân viên, ví dụ EMP-12"
                     className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white lowercase focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500"
                     required
                   />
@@ -492,7 +528,8 @@ export default function LoginScreen({
                         {registeredUsers.map((u) => {
                           const rLabel =
                             u.role === 'CEO' ? 'Giám Đốc (CEO)' :
-                            u.role === 'Accountant' ? 'Kế Toán Trưởng' :
+                            u.role === 'ChiefAccountant' ? 'Kế Toán Trưởng' :
+                            u.role === 'SiteAccountant' ? 'Kế Toán Công Trường' :
                             u.role === 'SiteManager' ? 'Chỉ Huy Trưởng' :
                             'Thanh Tra / Khách';
                           return (
@@ -635,7 +672,8 @@ export default function LoginScreen({
                 className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 cursor-pointer"
               >
                 <option value="CEO">Giám Đốc (CEO) - Đặc quyền tối cao</option>
-                <option value="Accountant">Kế Toán Trưởng - Sổ sách & Nhân sự</option>
+                <option value="ChiefAccountant">Kế Toán Trưởng - Kiểm soát tài chính</option>
+                <option value="SiteAccountant">Kế Toán Công Trường - Dự án được phân công</option>
                 <option value="SiteManager">Chỉ Huy Trưởng - Kho bãi & Công trường</option>
                 <option value="Auditor">Thanh Tra / Khách - Chế độ chỉ xem</option>
               </select>

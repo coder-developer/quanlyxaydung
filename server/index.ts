@@ -14,13 +14,45 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || jwtSecret.length < 32) throw new Error('JWT_SECRET phải có ít nhất 32 ký tự.');
 if (!process.env.DATABASE_URL) throw new Error('Thiếu DATABASE_URL.');
 
-type Role = 'CEO' | 'Accountant' | 'SiteManager' | 'Auditor' | 'Employee';
+type Role = 'CEO' | 'ChiefAccountant' | 'SiteAccountant' | 'SiteManager' | 'Auditor' | 'Employee';
 type SessionUser = { id: number; username: string; fullName: string; role: Role; employeeId?: string; mustChangePassword?: boolean; sessionVersion: number };
 
 type EmployeeAccountSource = { id?: string; code?: string; name?: string; role?: string; projectId?: string; active?: boolean };
 type JsonRecord = Record<string, any>;
+const normalizeEmployeeId = (value: unknown) => String(value || '').trim().toUpperCase();
+const employeeMatchesId = (employee: EmployeeAccountSource | undefined, employeeId: unknown) => {
+  const expected = normalizeEmployeeId(employeeId);
+  return Boolean(employee && expected && [employee.code, employee.id].some(value => normalizeEmployeeId(value) === expected));
+};
 
-const isSiteManagerEmployee = (employee: EmployeeAccountSource) => String(employee.role || '').toLocaleLowerCase('vi-VN').includes('chỉ huy trưởng');
+const DEFAULT_COMPANY_CONFIG = {
+  companyName: 'Công Ty Cổ Phần Xây Dựng', siteOffice: 'Tp Hồ Chí Minh', directorName: '', chiefAccountantName: '', treasurerName: '', technicianName: '',
+  journalTitle: 'SỔ NHẬT KÝ CHUNG', dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ', fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU', maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+  appTitle: 'Quản trị doanh nghiệp', siteManagerApprovalLimit: 50_000_000, accountantApprovalLimit: 200_000_000, fuelVarianceThreshold: 5, maxDailyWorkHours: 12, requireDoubleApproval: true,
+};
+const emptyStatePayload = () => ({
+  companyConfig: { ...DEFAULT_COMPANY_CONFIG }, projects: [], employees: [], contractors: [], contracts: [], inventoryItems: [], materialLimits: [], inventoryLedger: [], timesheets: [], equipment: [], approvals: [], transactions: [], laborContracts: [], constructionTasks: [],
+});
+
+const normalizedPosition = (employee: EmployeeAccountSource) => String(employee.role || '')
+  .trim()
+  .toLocaleLowerCase('vi-VN')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/g, 'd');
+const isSiteManagerEmployee = (employee: EmployeeAccountSource) => normalizedPosition(employee).includes('chi huy truong');
+const isChiefAccountantEmployee = (employee: EmployeeAccountSource) => normalizedPosition(employee).includes('ke toan truong');
+const isSiteAccountantEmployee = (employee: EmployeeAccountSource) => {
+  const position = normalizedPosition(employee);
+  return position.includes('ke toan cong truong') || position.includes('ke toan du an');
+};
+const roleForEmployee = (employee: EmployeeAccountSource): Role => isSiteManagerEmployee(employee)
+  ? 'SiteManager'
+  : isChiefAccountantEmployee(employee)
+    ? 'ChiefAccountant'
+    : isSiteAccountantEmployee(employee)
+      ? 'SiteAccountant'
+      : 'Employee';
 
 async function loadErpPayload() {
   const result = await pool.query('SELECT payload FROM erp_state WHERE id=1');
@@ -28,14 +60,15 @@ async function loadErpPayload() {
 }
 
 function projectScopeForUser(user: SessionUser, payload: JsonRecord) {
-  if (user.role !== 'SiteManager' || !user.employeeId) return new Set<string>();
+  if (!['SiteManager', 'SiteAccountant'].includes(user.role) || !user.employeeId) return new Set<string>();
   const employees = Array.isArray(payload.employees) ? payload.employees : [];
   const projects = Array.isArray(payload.projects) ? payload.projects : [];
-  const employee = employees.find((item: EmployeeAccountSource) => item.id === user.employeeId || item.code === user.employeeId);
-  if (!employee || !isSiteManagerEmployee(employee) || employee.active === false) return new Set<string>();
+  const employee = employees.find((item: EmployeeAccountSource) => employeeMatchesId(item, user.employeeId));
+  const validPosition = user.role === 'SiteManager' ? isSiteManagerEmployee(employee) : isSiteAccountantEmployee(employee);
+  if (!employee || !validPosition || employee.active === false) return new Set<string>();
   const ids = new Set<string>();
   if (employee.projectId) ids.add(String(employee.projectId));
-  for (const project of projects) {
+  for (const project of user.role === 'SiteManager' ? projects : []) {
     if (String(project.manager || '').trim().toLocaleLowerCase('vi-VN') === String(employee.name || '').trim().toLocaleLowerCase('vi-VN')) ids.add(String(project.id));
   }
   return ids;
@@ -44,13 +77,12 @@ function projectScopeForUser(user: SessionUser, payload: JsonRecord) {
 function filterPayloadForSiteManager(payload: JsonRecord, projectIds: Set<string>) {
   const inProject = (item: JsonRecord, key = 'projectId') => projectIds.has(String(item?.[key] || ''));
   const employees = Array.isArray(payload.employees) ? payload.employees.filter((item: JsonRecord) => inProject(item)) : [];
-  const employeeIds = new Set(employees.map((item: JsonRecord) => String(item.id)));
+  const employeeIds = new Set(employees.flatMap((item: JsonRecord) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean));
   const contracts = Array.isArray(payload.contracts) ? payload.contracts.filter((item: JsonRecord) => inProject(item)) : [];
   const partnerIds = new Set(contracts.map((item: JsonRecord) => String(item.partnerId)));
   const inventoryLedger = Array.isArray(payload.inventoryLedger) ? payload.inventoryLedger.filter((item: JsonRecord) => inProject(item)) : [];
   const materialLimits = Array.isArray(payload.materialLimits) ? payload.materialLimits.filter((item: JsonRecord) => inProject(item)) : [];
-  const inventoryIds = new Set([...inventoryLedger, ...materialLimits].map((item: JsonRecord) => String(item.itemId)));
-  const inventoryItems = (Array.isArray(payload.inventoryItems) ? payload.inventoryItems : []).filter((item: JsonRecord) => inventoryIds.has(String(item.id))).map((item: JsonRecord) => {
+  const inventoryItems = (Array.isArray(payload.inventoryItems) ? payload.inventoryItems : []).map((item: JsonRecord) => {
     const rows = inventoryLedger.filter((row: JsonRecord) => String(row.itemId) === String(item.id));
     const received = rows.filter((row: JsonRecord) => row.type === 'Receipt').reduce((sum: number, row: JsonRecord) => sum + Number(row.quantity || 0), 0);
     const issued = rows.filter((row: JsonRecord) => row.type === 'Issue').reduce((sum: number, row: JsonRecord) => sum + Number(row.quantity || 0), 0);
@@ -70,7 +102,7 @@ function filterPayloadForSiteManager(payload: JsonRecord, projectIds: Set<string
     equipment: Array.isArray(payload.equipment) ? payload.equipment.filter((item: JsonRecord) => inProject(item, 'currentProjectId')) : [],
     approvals: Array.isArray(payload.approvals) ? payload.approvals.filter((item: JsonRecord) => inProject(item)) : [],
     transactions: Array.isArray(payload.transactions) ? payload.transactions.filter((item: JsonRecord) => inProject(item)) : [],
-    laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: JsonRecord) => employeeIds.has(String(item.employeeId))) : [],
+    laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: JsonRecord) => employeeIds.has(normalizeEmployeeId(item.employeeId))) : [],
     constructionTasks: Array.isArray(payload.constructionTasks) ? payload.constructionTasks.filter((item: JsonRecord) => inProject(item)) : [],
   };
 }
@@ -84,10 +116,88 @@ function mergeScopedRows(existing: any, incoming: any, belongsToScope: (item: Js
 function mergeSiteManagerPayload(current: JsonRecord, incoming: JsonRecord, projectIds: Set<string>) {
   const inProject = (item: JsonRecord, key = 'projectId') => projectIds.has(String(item?.[key] || ''));
   const result: JsonRecord = {};
+  if ('projects' in incoming) {
+    const incomingById = new Map((Array.isArray(incoming.projects) ? incoming.projects : []).map((item: JsonRecord) => [String(item.id), item]));
+    result.projects = (Array.isArray(current.projects) ? current.projects : []).map((project: JsonRecord) => {
+      if (!projectIds.has(String(project.id))) return project;
+      const update = incomingById.get(String(project.id));
+      if (!update) return project;
+      return { ...project, ...update, id: project.id, code: project.code, manager: project.manager, budget: project.budget };
+    });
+  }
   for (const key of ['inventoryLedger', 'materialLimits', 'timesheets', 'approvals', 'constructionTasks']) {
     if (key in incoming) result[key] = mergeScopedRows(current[key], incoming[key], item => inProject(item));
   }
   if ('equipment' in incoming) result.equipment = mergeScopedRows(current.equipment, incoming.equipment, item => inProject(item, 'currentProjectId'));
+  if ('employees' in incoming) {
+    const existing = Array.isArray(current.employees) ? current.employees : [];
+    const existingIds = new Set(existing.flatMap((item: JsonRecord) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean));
+    const createdIds = new Set<string>();
+    const created = (Array.isArray(incoming.employees) ? incoming.employees : [])
+      .filter((item: JsonRecord) => {
+        const employeeId = normalizeEmployeeId(item.code || item.id);
+        if (!employeeId || existingIds.has(employeeId) || createdIds.has(employeeId) || !projectIds.has(String(item.projectId || ''))) return false;
+        if (!/^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(employeeId) || String(item.name || '').trim().length < 2 || String(item.phone || '').trim().length < 6) return false;
+        createdIds.add(employeeId);
+        return true;
+      })
+      .slice(0, 50)
+      .map((item: JsonRecord) => {
+        const employeeId = normalizeEmployeeId(item.code || item.id);
+        return {
+          ...item,
+          id: employeeId,
+          code: employeeId,
+          name: String(item.name).trim().slice(0, 150),
+          phone: String(item.phone).trim().slice(0, 30),
+          role: 'Nhân viên công trường',
+          projectId: String(item.projectId),
+          baseSalary: 0,
+          active: true,
+        };
+      });
+    result.employees = [...existing, ...created];
+  }
+  return result;
+}
+
+function mergeChiefAccountantPayload(current: JsonRecord, incoming: JsonRecord) {
+  const result: JsonRecord = {};
+  for (const key of ['contractors', 'transactions', 'approvals', 'laborContracts']) {
+    if (key in incoming) result[key] = incoming[key];
+  }
+  if ('contracts' in incoming) {
+    const existingIds = new Set((Array.isArray(current.contracts) ? current.contracts : []).map((item: JsonRecord) => String(item.id)));
+    result.contracts = (Array.isArray(incoming.contracts) ? incoming.contracts : []).filter((item: JsonRecord) => existingIds.has(String(item.id)));
+  }
+  return result;
+}
+
+function mergeSiteAccountantPayload(current: JsonRecord, incoming: JsonRecord, projectIds: Set<string>, user: SessionUser) {
+  const inProject = (item: JsonRecord) => projectIds.has(String(item?.projectId || ''));
+  const result: JsonRecord = {};
+  for (const key of ['inventoryLedger', 'materialLimits']) {
+    if (key in incoming) result[key] = mergeScopedRows(current[key], incoming[key], inProject);
+  }
+  if ('equipment' in incoming) {
+    result.equipment = mergeScopedRows(current.equipment, incoming.equipment, item => projectIds.has(String(item?.currentProjectId || '')));
+  }
+  if ('transactions' in incoming) {
+    const existing = Array.isArray(current.transactions) ? current.transactions : [];
+    const existingIds = new Set(existing.map((item: JsonRecord) => String(item.id)));
+    const created = (Array.isArray(incoming.transactions) ? incoming.transactions : [])
+      .filter((item: JsonRecord) => inProject(item) && !existingIds.has(String(item.id)))
+      .map((item: JsonRecord) => ({ ...item, entryStatus: 'Draft', enteredBy: user.id }));
+    result.transactions = [...existing, ...created];
+  }
+  if ('approvals' in incoming) {
+    const existing = Array.isArray(current.approvals) ? current.approvals : [];
+    const existingIds = new Set(existing.map((item: JsonRecord) => String(item.id)));
+    const created = (Array.isArray(incoming.approvals) ? incoming.approvals : [])
+      .filter((item: JsonRecord) => inProject(item) && !existingIds.has(String(item.id)))
+      .map((item: JsonRecord) => ({ ...item, currentLevel: 1, status: 'Pending_Accountant', createdBy: user.id }));
+    result.approvals = [...existing, ...created];
+  }
   return result;
 }
 
@@ -110,6 +220,31 @@ function changedPeriods(beforeValue: unknown, afterValue: unknown, applies: (ite
   return [...periods];
 }
 
+function normalizeCascades(payload: JsonRecord) {
+  const next = { ...emptyStatePayload(), ...payload } as JsonRecord;
+  const projects = Array.isArray(next.projects) ? next.projects : [];
+  const projectIds = new Set(projects.map((item: JsonRecord) => String(item.id)));
+  const employees = (Array.isArray(next.employees) ? next.employees : []).map((item: JsonRecord) => projectIds.has(String(item.projectId)) ? item : { ...item, projectId: '' });
+  const employeeIds = new Set(employees.flatMap((item: JsonRecord) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean));
+  const contractors = Array.isArray(next.contractors) ? next.contractors : [];
+  const contractorIds = new Set(contractors.map((item: JsonRecord) => String(item.id)));
+  const contracts = (Array.isArray(next.contracts) ? next.contracts : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && (item.partnerType !== 'Contractor' || contractorIds.has(String(item.partnerId))));
+  const contractIds = new Set(contracts.map((item: JsonRecord) => String(item.id)));
+  const inventoryItems = Array.isArray(next.inventoryItems) ? next.inventoryItems : [];
+  const inventoryIds = new Set(inventoryItems.map((item: JsonRecord) => String(item.id)));
+  return {
+    ...next, projects, employees, contractors, contracts, inventoryItems,
+    materialLimits: (Array.isArray(next.materialLimits) ? next.materialLimits : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && inventoryIds.has(String(item.itemId))),
+    inventoryLedger: (Array.isArray(next.inventoryLedger) ? next.inventoryLedger : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && inventoryIds.has(String(item.itemId))),
+    timesheets: (Array.isArray(next.timesheets) ? next.timesheets : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && employeeIds.has(normalizeEmployeeId(item.employeeId))),
+    equipment: (Array.isArray(next.equipment) ? next.equipment : []).map((item: JsonRecord) => projectIds.has(String(item.currentProjectId)) ? item : { ...item, currentProjectId: '' }),
+    approvals: (Array.isArray(next.approvals) ? next.approvals : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && (!item.requesterId || employeeIds.has(normalizeEmployeeId(item.requesterId)))),
+    transactions: (Array.isArray(next.transactions) ? next.transactions : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId)) && (!item.referenceId || contractIds.has(String(item.referenceId)) || !String(item.referenceId).startsWith('HD-'))),
+    laborContracts: (Array.isArray(next.laborContracts) ? next.laborContracts : []).filter((item: JsonRecord) => employeeIds.has(normalizeEmployeeId(item.employeeId))),
+    constructionTasks: (Array.isArray(next.constructionTasks) ? next.constructionTasks : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))),
+  };
+}
+
 async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
   const defaultPassword = process.env.SEED_EMPLOYEE_PIN || '5555';
   if (process.env.NODE_ENV === 'production' && defaultPassword.length < 6) {
@@ -118,20 +253,23 @@ async function provisionEmployeeAccounts(employees: EmployeeAccountSource[]) {
   const passwordHash = await bcrypt.hash(defaultPassword, 12);
   let created = 0;
   for (const employee of employees) {
-    if (employee.active === false) continue;
     const employeeId = String(employee.code || employee.id || '').trim().toUpperCase();
     if (!/^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(employeeId)) continue;
+    if (employee.active === false) {
+      await pool.query('UPDATE app_users SET active=FALSE,session_version=session_version+1 WHERE UPPER(employee_id)=$1 AND active=TRUE', [employeeId]);
+      continue;
+    }
     const username = employeeId.toLowerCase();
-    const desiredRole: Role = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
-    const existing = await pool.query('SELECT id,username FROM app_users WHERE employee_id=$1 LIMIT 1', [employeeId]);
+    const desiredRole = roleForEmployee(employee);
+    const existing = await pool.query('SELECT id,username,active FROM app_users WHERE UPPER(employee_id)=$1 LIMIT 1', [employeeId]);
     if (existing.rowCount) {
       if (existing.rows[0].username === 'nhanvien') {
         const usernameOwner = await pool.query('SELECT id FROM app_users WHERE username=$1 AND id<>$2 LIMIT 1', [username, existing.rows[0].id]);
         if (!usernameOwner.rowCount) await pool.query('UPDATE app_users SET username=$1 WHERE id=$2', [username, existing.rows[0].id]);
       }
       await pool.query(
-        `UPDATE app_users SET full_name=$1, role=$2,
-         session_version=session_version+CASE WHEN role<>$2 THEN 1 ELSE 0 END
+        `UPDATE app_users SET full_name=$1, role=$2, active=TRUE,
+         session_version=session_version+CASE WHEN role<>$2 OR active=FALSE THEN 1 ELSE 0 END
          WHERE id=$3`,
         [String(employee.name || employeeId), desiredRole, existing.rows[0].id],
       );
@@ -205,7 +343,14 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   if (!/^[a-z0-9._-]{3,32}$/.test(username) || !/^\d{4,12}$/.test(pin)) return res.status(400).json({ error: 'Thông tin đăng nhập không hợp lệ.' });
   const attempt = await pool.query('SELECT failed_count,window_started,locked_until FROM auth_attempts WHERE username=$1', [username]);
   if (attempt.rows[0]?.locked_until && new Date(attempt.rows[0].locked_until).getTime() > Date.now()) return res.status(429).json({ error: 'Tài khoản tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.' });
-  const result = await pool.query('SELECT id, username, full_name, role, employee_id, pin_hash, must_change_pin, session_version FROM app_users WHERE username=$1 AND active=TRUE', [username]);
+  const result = await pool.query(
+    `SELECT id, username, full_name, role, employee_id, pin_hash, must_change_pin, session_version
+     FROM app_users
+     WHERE active=TRUE AND (username=$1 OR LOWER(employee_id)=$1)
+     ORDER BY (username=$1) DESC
+     LIMIT 1`,
+    [username],
+  );
   const row = result.rows[0];
   if (!row || !(await bcrypt.compare(pin, row.pin_hash))) {
     await pool.query(
@@ -233,14 +378,15 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   const state = await pool.query('SELECT payload FROM erp_state WHERE id=1');
   const employees = Array.isArray(state.rows[0]?.payload?.employees) ? state.rows[0].payload.employees : [];
   const employee = employees.find((item: { id?: string; code?: string; phone?: string; active?: boolean }) =>
-    (item.id === employeeCode || item.code === employeeCode) && String(item.phone || '').replace(/\D/g, '') === phone && item.active !== false,
+    employeeMatchesId(item, employeeCode) && String(item.phone || '').replace(/\D/g, '') === phone && item.active !== false,
   );
   if (!employee) return res.status(404).json({ error: 'Không tìm thấy hồ sơ nhân viên khớp mã và số điện thoại.' });
-  const linked = await pool.query('SELECT 1 FROM app_users WHERE employee_id=$1', [employee.id]);
+  const linkedEmployeeId = normalizeEmployeeId(employee.code || employee.id);
+  const linked = await pool.query('SELECT 1 FROM app_users WHERE UPPER(employee_id)=$1', [linkedEmployeeId]);
   if (linked.rowCount) return res.status(409).json({ error: 'Hồ sơ nhân viên này đã có tài khoản.' });
   try {
-    const role: Role = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin,session_version', [username, employee.name, role, await bcrypt.hash(pin, 12), employee.id]);
+    const role = roleForEmployee(employee);
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,FALSE) RETURNING id,username,full_name,role,employee_id,must_change_pin,session_version', [username, employee.name, role, await bcrypt.hash(pin, 12), linkedEmployeeId]);
     const row = result.rows[0];
     const user: SessionUser = { id: Number(row.id), username: row.username, fullName: row.full_name, role: row.role, employeeId: row.employee_id, mustChangePassword: false, sessionVersion: Number(row.session_version) };
     res.status(201).json({ token: sign(user), user });
@@ -261,7 +407,11 @@ app.post('/api/auth/change-pin', authenticate, authLimiter, async (req, res) => 
   res.json({ success: true });
 });
 
-app.post('/api/admin/sync-business-ids', authenticate, requireRoles('CEO', 'Accountant'), async (req, res) => {
+app.get('/api/auth/me', authenticate, async (_req, res) => {
+  res.json({ user: res.locals.user as SessionUser });
+});
+
+app.post('/api/admin/sync-business-ids', authenticate, requireRoles('CEO'), async (req, res) => {
   const mappings = Array.isArray(req.body.mappings) ? req.body.mappings.slice(0, 500) : [];
   const valid = mappings.every((item: any) => ['project', 'employee', 'contractor', 'contract', 'inventory', 'equipment'].includes(item.entityType)
     && /^[A-Z0-9][A-Z0-9._-]{1,63}$/.test(String(item.oldId || '').toUpperCase())
@@ -272,12 +422,23 @@ app.post('/api/admin/sync-business-ids', authenticate, requireRoles('CEO', 'Acco
     await client.query('BEGIN');
     for (const item of mappings) {
       if (item.entityType === 'employee') {
-        await client.query('UPDATE app_users SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
-        await client.query('UPDATE workforce_requests SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
-        await client.query('UPDATE work_shifts SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
-        await client.query('UPDATE notifications SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
-        await client.query('UPDATE payslip_views SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
-        await client.query('UPDATE privacy_consents SET employee_id=$1 WHERE employee_id=$2', [item.newId, item.oldId]);
+        const oldId = normalizeEmployeeId(item.oldId);
+        const newId = normalizeEmployeeId(item.newId);
+        if (oldId === newId) continue;
+        const targetOwner = await client.query('SELECT id FROM app_users WHERE UPPER(employee_id)=$1 ORDER BY active DESC,id LIMIT 1', [newId]);
+        if (targetOwner.rowCount) {
+          await client.query('UPDATE app_users SET employee_id=NULL,active=FALSE,session_version=session_version+1 WHERE UPPER(employee_id)=$1 AND id<>$2', [oldId, targetOwner.rows[0].id]);
+        } else {
+          await client.query('UPDATE app_users SET employee_id=$1,session_version=session_version+1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
+        }
+        await client.query('UPDATE workforce_requests SET employee_id=$1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
+        await client.query('UPDATE work_shifts SET employee_id=$1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
+        await client.query('UPDATE notifications SET employee_id=$1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
+        await client.query('DELETE FROM payslip_views old_row USING payslip_views new_row WHERE UPPER(old_row.employee_id)=$1 AND UPPER(new_row.employee_id)=$2 AND old_row.period=new_row.period', [oldId, newId]);
+        await client.query('UPDATE payslip_views SET employee_id=$1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
+        const consentExists = await client.query('SELECT 1 FROM privacy_consents WHERE UPPER(employee_id)=$1', [newId]);
+        if (consentExists.rowCount) await client.query('DELETE FROM privacy_consents WHERE UPPER(employee_id)=$1', [oldId]);
+        else await client.query('UPDATE privacy_consents SET employee_id=$1 WHERE UPPER(employee_id)=$2', [newId, oldId]);
       }
       if (item.entityType === 'project') {
         await client.query('UPDATE work_shifts SET project_id=$1 WHERE project_id=$2', [item.newId, item.oldId]);
@@ -307,15 +468,15 @@ app.post('/api/admin/users', authenticate, requireRoles('CEO'), async (req, res)
   let effectiveFullName = String(fullName || '').trim();
   if (employeeId) {
     const payload = await loadErpPayload();
-    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: EmployeeAccountSource) => item.id === employeeId || item.code === employeeId);
+    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: EmployeeAccountSource) => employeeMatchesId(item, employeeId));
     if (!employee) return res.status(400).json({ error: 'Hồ sơ nhân viên không tồn tại.' });
-    effectiveRole = isSiteManagerEmployee(employee) ? 'SiteManager' : 'Employee';
+    effectiveRole = roleForEmployee(employee);
     effectiveFullName = String(employee.name || effectiveFullName);
   }
-  if (!['CEO', 'Accountant', 'SiteManager', 'Auditor', 'Employee'].includes(effectiveRole) || !effectiveFullName) return res.status(400).json({ error: 'Vai trò hoặc họ tên không hợp lệ.' });
+  if (!['CEO', 'ChiefAccountant', 'SiteAccountant', 'SiteManager', 'Auditor', 'Employee'].includes(effectiveRole) || !effectiveFullName) return res.status(400).json({ error: 'Vai trò hoặc họ tên không hợp lệ.' });
   const hash = await bcrypt.hash(String(pin), 12);
   try {
-    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, effectiveFullName, effectiveRole, hash, employeeId || null]);
+    const result = await pool.query('INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) RETURNING id,username,full_name,role,employee_id,must_change_pin,active', [username, effectiveFullName, effectiveRole, hash, employeeId ? normalizeEmployeeId(employeeId) : null]);
     res.status(201).json(result.rows[0]);
   } catch (error: any) {
     res.status(error?.code === '23505' ? 409 : 500).json({ error: error?.code === '23505' ? 'Tên đăng nhập đã tồn tại.' : 'Không tạo được tài khoản.' });
@@ -357,15 +518,38 @@ app.delete('/api/admin/users/:id', authenticate, requireRoles('CEO'), async (req
   res.json({ success: true });
 });
 
+app.post('/api/admin/reset-system', authenticate, requireRoles('CEO'), async (req, res) => {
+  if (req.body.confirmation !== 'RESET_TO_DEFAULT') return res.status(400).json({ error: 'Thiếu mã xác nhận reset hệ thống.' });
+  const user = res.locals.user as SessionUser;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const table of ['notifications', 'payslip_views', 'privacy_consents', 'work_shifts', 'workforce_requests', 'payroll_periods', 'auth_attempts', 'erp_state_backups', 'audit_log']) {
+      await client.query(`DELETE FROM ${table}`);
+    }
+    const result = await client.query('UPDATE erp_state SET payload=$1,revision=revision+1,updated_by=$2,updated_at=NOW() WHERE id=1 RETURNING revision,payload,updated_at', [emptyStatePayload(), user.id]);
+    await client.query('DELETE FROM app_users WHERE employee_id IS NOT NULL');
+    await client.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'system_reset', { defaultCompany: DEFAULT_COMPANY_CONFIG.companyName }]);
+    await client.query('COMMIT');
+    res.json(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    res.status(500).json({ error: 'Không thể reset hệ thống an toàn.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/workforce/requests', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
   let result;
-  if (user.role === 'Employee') result = await pool.query('SELECT * FROM workforce_requests WHERE employee_id=$1 ORDER BY created_at DESC', [user.employeeId]);
+  if (user.role === 'Employee') result = await pool.query('SELECT * FROM workforce_requests WHERE UPPER(employee_id)=$1 ORDER BY created_at DESC', [normalizeEmployeeId(user.employeeId)]);
   else if (user.role === 'SiteManager') {
     const payload = await loadErpPayload();
     const projectIds = projectScopeForUser(user, payload);
-    const employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).map((item: JsonRecord) => String(item.id));
-    result = await pool.query('SELECT * FROM workforce_requests WHERE employee_id=ANY($1::text[]) ORDER BY created_at DESC', [employeeIds]);
+    const employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).flatMap((item: JsonRecord) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
+    result = await pool.query('SELECT * FROM workforce_requests WHERE UPPER(employee_id)=ANY($1::text[]) ORDER BY created_at DESC', [employeeIds]);
   } else result = await pool.query('SELECT * FROM workforce_requests ORDER BY created_at DESC');
   res.json(result.rows);
 });
@@ -373,17 +557,19 @@ app.get('/api/workforce/requests', authenticate, async (_req, res) => {
 app.post('/api/workforce/requests', authenticate, requireRoles('Employee'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   const { requestType, startAt, endAt, reason } = req.body;
-  const validRequestTypes = ['leave', 'overtime', 'business_trip', 'shift_swap'];
+  const amount = Number(req.body.amount || 0);
+  const validRequestTypes = ['leave', 'overtime', 'business_trip', 'shift_swap', 'salary_advance'];
   const start = new Date(startAt); const end = new Date(endAt);
-  if (!validRequestTypes.includes(requestType) || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || String(reason || '').trim().length < 3 || String(reason).length > 1000) return res.status(400).json({ error: 'Nội dung yêu cầu không hợp lệ.' });
+  const invalidAmount = requestType === 'salary_advance' && (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000);
+  if (!validRequestTypes.includes(requestType) || invalidAmount || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || String(reason || '').trim().length < 3 || String(reason).length > 1000) return res.status(400).json({ error: 'Nội dung yêu cầu không hợp lệ.' });
   const id = randomUUID();
-  const result = await pool.query('INSERT INTO workforce_requests(id,employee_id,request_type,start_at,end_at,reason) VALUES($1,$2,$3,$4,$5,$6) RETURNING *', [id, user.employeeId, requestType, startAt, endAt, reason]);
+  const result = await pool.query('INSERT INTO workforce_requests(id,employee_id,request_type,start_at,end_at,reason,amount) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *', [id, normalizeEmployeeId(user.employeeId), requestType, startAt, endAt, String(reason).trim(), requestType === 'salary_advance' ? amount : 0]);
   const payload = await loadErpPayload();
-  const requester = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => item.id === user.employeeId);
+  const requester = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => employeeMatchesId(item, user.employeeId));
   const managerIds = (Array.isArray(payload.employees) ? payload.employees : [])
     .filter((item: EmployeeAccountSource) => isSiteManagerEmployee(item) && item.projectId === requester?.projectId)
-    .map((item: EmployeeAccountSource) => String(item.id));
-  const reviewers = await pool.query("SELECT id FROM app_users WHERE active=TRUE AND (role='CEO' OR (role='SiteManager' AND employee_id=ANY($1::text[])))", [managerIds]);
+    .flatMap((item: EmployeeAccountSource) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
+  const reviewers = await pool.query("SELECT id FROM app_users WHERE active=TRUE AND (role='CEO' OR (role='SiteManager' AND UPPER(employee_id)=ANY($1::text[])))", [managerIds]);
   for (const reviewer of reviewers.rows) await pool.query("INSERT INTO notifications(id,user_id,title,message,category) VALUES($1,$2,$3,$4,'approval')", [randomUUID(), reviewer.id, 'Yêu cầu mới cần duyệt', `${user.fullName} vừa gửi một yêu cầu ${requestType}.`]);
   res.status(201).json(result.rows[0]);
 });
@@ -395,20 +581,21 @@ app.patch('/api/workforce/requests/:id/review', authenticate, requireRoles('CEO'
   if (user.role === 'SiteManager') {
     const payload = await loadErpPayload();
     const projectIds = projectScopeForUser(user, payload);
-    employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).map((item: JsonRecord) => String(item.id));
+    employeeIds = (Array.isArray(payload.employees) ? payload.employees : []).filter((item: JsonRecord) => projectIds.has(String(item.projectId))).flatMap((item: JsonRecord) => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
   }
   const result = employeeIds
-    ? await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' AND employee_id=ANY($5::text[]) RETURNING *', [status, user.id, req.body.note || '', req.params.id, employeeIds])
+    ? await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' AND UPPER(employee_id)=ANY($5::text[]) RETURNING *', [status, user.id, req.body.note || '', req.params.id, employeeIds])
     : await pool.query('UPDATE workforce_requests SET status=$1,reviewed_by=$2,review_note=$3,reviewed_at=NOW() WHERE id=$4 AND status=\'pending\' RETURNING *', [status, user.id, req.body.note || '', req.params.id]);
   const row = result.rows[0];
   if (row) await pool.query("INSERT INTO notifications(id,employee_id,title,message,category) VALUES($1,$2,$3,$4,'request')", [randomUUID(), row.employee_id, 'Yêu cầu đã được xử lý', `Yêu cầu của bạn đã ${status === 'approved' ? 'được duyệt' : 'bị từ chối'}.`]);
+  if (!row) return res.status(404).json({ error: 'Yêu cầu không tồn tại, đã được xử lý hoặc nằm ngoài công trường được phân quyền.' });
   res.json(row);
 });
 
 app.get('/api/workforce/shifts', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
   let result;
-  if (user.role === 'Employee') result = await pool.query('SELECT * FROM work_shifts WHERE employee_id=$1 ORDER BY shift_date', [user.employeeId]);
+  if (user.role === 'Employee') result = await pool.query('SELECT * FROM work_shifts WHERE UPPER(employee_id)=$1 ORDER BY shift_date', [normalizeEmployeeId(user.employeeId)]);
   else if (user.role === 'SiteManager') {
     const projectIds = [...projectScopeForUser(user, await loadErpPayload())];
     result = await pool.query('SELECT * FROM work_shifts WHERE project_id=ANY($1::text[]) ORDER BY shift_date', [projectIds]);
@@ -423,7 +610,7 @@ app.post('/api/workforce/shifts', authenticate, requireRoles('CEO','SiteManager'
   if (user.role === 'SiteManager') {
     const payload = await loadErpPayload();
     const projectIds = projectScopeForUser(user, payload);
-    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => item.id === employeeId);
+    const employee = (Array.isArray(payload.employees) ? payload.employees : []).find((item: JsonRecord) => employeeMatchesId(item, employeeId));
     if (!projectIds.has(String(projectId)) || !employee || !projectIds.has(String(employee.projectId))) return res.status(403).json({ error: 'Bạn chỉ được phân ca cho nhân viên thuộc công trường mình quản lý.' });
   }
   const result = await pool.query('INSERT INTO work_shifts(id,employee_id,project_id,shift_date,start_time,end_time,shift_name,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(employee_id,shift_date) DO UPDATE SET project_id=EXCLUDED.project_id,start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,shift_name=EXCLUDED.shift_name RETURNING *', [randomUUID(), employeeId, projectId, shiftDate, startTime, endTime, shiftName, user.id]);
@@ -431,7 +618,7 @@ app.post('/api/workforce/shifts', authenticate, requireRoles('CEO','SiteManager'
 });
 
 app.get('/api/workforce/payroll-periods', authenticate, async (_req, res) => res.json((await pool.query('SELECT * FROM payroll_periods ORDER BY period DESC')).rows));
-app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CEO','Accountant'), async (req, res) => {
+app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CEO','ChiefAccountant'), async (req, res) => {
   const user = res.locals.user as SessionUser;
   const period = String(req.params.period);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'Kỳ lương không hợp lệ.' });
@@ -445,13 +632,13 @@ app.put('/api/workforce/payroll-periods/:period', authenticate, requireRoles('CE
 
 app.get('/api/notifications', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
-  const allowGlobal = ['CEO', 'Accountant'].includes(user.role);
+  const allowGlobal = ['CEO', 'ChiefAccountant'].includes(user.role);
   const result = await pool.query('SELECT * FROM notifications WHERE (user_id=$1 OR employee_id=$2 OR ($3::boolean AND user_id IS NULL AND employee_id IS NULL)) ORDER BY created_at DESC LIMIT 50', [user.id, user.employeeId || null, allowGlobal]);
   res.json(result.rows);
 });
 app.patch('/api/notifications/:id/read', authenticate, async (req, res) => {
   const user = res.locals.user as SessionUser;
-  const allowGlobal = ['CEO', 'Accountant'].includes(user.role);
+  const allowGlobal = ['CEO', 'ChiefAccountant'].includes(user.role);
   const result = await pool.query(
     'UPDATE notifications SET read_at=NOW() WHERE id=$1 AND (user_id=$2 OR employee_id=$3 OR ($4::boolean AND user_id IS NULL AND employee_id IS NULL)) RETURNING id',
     [req.params.id, user.id, user.employeeId || null, allowGlobal],
@@ -476,14 +663,15 @@ app.get('/api/state', authenticate, async (_req, res) => {
   const user = res.locals.user as SessionUser;
   if (user.role === 'Employee') {
     const payload = row.payload || {};
+    const ownEmployee = Array.isArray(payload.employees) ? payload.employees.find((item: EmployeeAccountSource) => employeeMatchesId(item, user.employeeId)) : undefined;
     row.payload = {
       companyConfig: payload.companyConfig,
-      employees: Array.isArray(payload.employees) ? payload.employees.filter((item: { id?: string }) => item.id === user.employeeId) : [],
-      projects: Array.isArray(payload.projects) ? payload.projects.filter((project: { id?: string }) => payload.employees?.some((employee: { id?: string; projectId?: string }) => employee.id === user.employeeId && employee.projectId === project.id)) : [],
-      timesheets: Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: { employeeId?: string }) => item.employeeId === user.employeeId) : [],
-      laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: { employeeId?: string }) => item.employeeId === user.employeeId) : [],
+      employees: ownEmployee ? [ownEmployee] : [],
+      projects: Array.isArray(payload.projects) ? payload.projects.filter((project: { id?: string }) => ownEmployee?.projectId === project.id) : [],
+      timesheets: Array.isArray(payload.timesheets) ? payload.timesheets.filter((item: { employeeId?: string }) => normalizeEmployeeId(item.employeeId) === normalizeEmployeeId(user.employeeId)) : [],
+      laborContracts: Array.isArray(payload.laborContracts) ? payload.laborContracts.filter((item: { employeeId?: string }) => normalizeEmployeeId(item.employeeId) === normalizeEmployeeId(user.employeeId)) : [],
     };
-  } else if (user.role === 'SiteManager') {
+  } else if (user.role === 'SiteManager' || user.role === 'SiteAccountant') {
     row.payload = filterPayloadForSiteManager(row.payload || {}, projectScopeForUser(user, row.payload || {}));
   }
   res.json(row);
@@ -503,6 +691,12 @@ app.put('/api/state', authenticate, async (req, res) => {
   const currentState = await pool.query('SELECT payload FROM erp_state WHERE id=1');
   const currentPayload = (currentState.rows[0]?.payload || {}) as JsonRecord;
   let permittedPayload = payload;
+  if (user.role === 'ChiefAccountant') permittedPayload = mergeChiefAccountantPayload(currentPayload, payload);
+  if (user.role === 'SiteAccountant') {
+    const projectIds = projectScopeForUser(user, currentPayload);
+    if (!projectIds.size) return res.status(403).json({ error: 'Tài khoản Kế toán công trường chưa được phân công dự án.' });
+    permittedPayload = mergeSiteAccountantPayload(currentPayload, payload, projectIds, user);
+  }
   if (user.role === 'SiteManager') {
     const projectIds = projectScopeForUser(user, currentPayload);
     if (!projectIds.size) return res.status(403).json({ error: 'Tài khoản Chỉ huy trưởng chưa được gắn với công trường.' });
@@ -513,7 +707,7 @@ app.put('/api/state', authenticate, async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const employees = Array.isArray(currentPayload.employees) ? currentPayload.employees : [];
     const projects = Array.isArray(currentPayload.projects) ? currentPayload.projects : [];
-    const employee = employees.find((item: JsonRecord) => item.id === user.employeeId);
+    const employee = employees.find((item: JsonRecord) => employeeMatchesId(item, user.employeeId));
     const project = projects.find((item: JsonRecord) => item.id === employee?.projectId);
     if (!employee || !project) return res.status(403).json({ error: 'Hồ sơ nhân viên chưa được phân công công trường.' });
     const projectLatitude = Number(project.latitude);
@@ -523,7 +717,7 @@ app.put('/api/state', authenticate, async (req, res) => {
       return res.status(409).json({ error: 'Công trường chưa được cấu hình geofence hợp lệ.' });
     }
     let ownTimesheets = Array.isArray(payload.timesheets)
-      ? payload.timesheets.filter((item: { employeeId?: string; date?: string }) => item.employeeId === user.employeeId && item.date === today)
+      ? payload.timesheets.filter((item: { employeeId?: string; date?: string }) => normalizeEmployeeId(item.employeeId) === normalizeEmployeeId(user.employeeId) && item.date === today)
       : [];
     const hasPhoto = ownTimesheets.some((item: JsonRecord) => Boolean(item.attendancePhoto));
     if (ownTimesheets.some((item: JsonRecord) => typeof item.attendancePhoto === 'string' && item.attendancePhoto.length > 2_200_000)) return res.status(413).json({ error: 'Ảnh chấm công vượt quá dung lượng cho phép.' });
@@ -552,12 +746,13 @@ app.put('/api/state', authenticate, async (req, res) => {
     if (outsideGeofence) return res.status(403).json({ error: 'Vị trí hiện tại nằm ngoài geofence của công trường.' });
     permittedPayload = {
       timesheets: [
-        ...existingTimesheets.filter((item: { employeeId?: string }) => item.employeeId !== user.employeeId),
-        ...existingTimesheets.filter((item: { employeeId?: string; date?: string }) => item.employeeId === user.employeeId && item.date !== today),
+        ...existingTimesheets.filter((item: { employeeId?: string }) => normalizeEmployeeId(item.employeeId) !== normalizeEmployeeId(user.employeeId)),
+        ...existingTimesheets.filter((item: { employeeId?: string; date?: string }) => normalizeEmployeeId(item.employeeId) === normalizeEmployeeId(user.employeeId) && item.date !== today),
         ...ownTimesheets,
       ],
     };
   }
+  permittedPayload = normalizeCascades({ ...currentPayload, ...permittedPayload });
   const nextTimesheets = Array.isArray(permittedPayload.timesheets) ? permittedPayload.timesheets : currentPayload.timesheets;
   const nextTransactions = Array.isArray(permittedPayload.transactions) ? permittedPayload.transactions : currentPayload.transactions;
   const changedAttendancePeriods = changedPeriods(currentPayload.timesheets, nextTimesheets);
@@ -576,10 +771,20 @@ app.put('/api/state', authenticate, async (req, res) => {
     [permittedPayload, user.id, revision],
   );
   if (!result.rowCount) return res.status(409).json({ error: 'Dữ liệu trên máy chủ đã thay đổi. Hãy tải lại trước khi lưu.', code: 'REVISION_CONFLICT' });
+  await pool.query('INSERT INTO erp_state_backups(revision,payload,created_by) VALUES($1,$2,$3)', [revision, currentPayload, user.id]);
+  await pool.query('DELETE FROM erp_state_backups WHERE id NOT IN (SELECT id FROM erp_state_backups ORDER BY id DESC LIMIT 50)');
   await pool.query('INSERT INTO audit_log(user_id,action,metadata) VALUES($1,$2,$3)', [user.id, 'state_updated', { revision: result.rows[0].revision }]);
-  if (Array.isArray(permittedPayload.employees) && ['CEO', 'Accountant'].includes(user.role)) {
+  if (Array.isArray(permittedPayload.employees) && ['CEO', 'SiteManager'].includes(user.role)) {
     await provisionEmployeeAccounts(permittedPayload.employees);
   }
+  const projectIds = (permittedPayload.projects as JsonRecord[]).map(item => String(item.id));
+  const employeeIds = (permittedPayload.employees as JsonRecord[]).flatMap(item => [normalizeEmployeeId(item.id), normalizeEmployeeId(item.code)]).filter(Boolean);
+  await pool.query('UPDATE app_users SET active=FALSE,session_version=session_version+1 WHERE employee_id IS NOT NULL AND UPPER(employee_id)<>ALL($1::text[]) AND active=TRUE', [employeeIds]);
+  await pool.query('DELETE FROM work_shifts WHERE project_id<>ALL($1::text[]) OR UPPER(employee_id)<>ALL($2::text[])', [projectIds, employeeIds]);
+  await pool.query('DELETE FROM workforce_requests WHERE UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
+  await pool.query('DELETE FROM notifications WHERE employee_id IS NOT NULL AND UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
+  await pool.query('DELETE FROM payslip_views WHERE UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
+  await pool.query('DELETE FROM privacy_consents WHERE UPPER(employee_id)<>ALL($1::text[])', [employeeIds]);
   res.json(result.rows[0]);
 });
 
@@ -591,7 +796,7 @@ await migrate();
 
 const seeds: Array<[string, string, Role, string, string?]> = [
   ['ceo', 'Giám đốc', 'CEO', process.env.SEED_CEO_PIN || '1111'],
-  ['ketoan', 'Kế toán trưởng', 'Accountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
+  ['ketoan', 'Kế toán trưởng', 'ChiefAccountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
   ['kiemtoan', 'Kiểm toán viên', 'Auditor', process.env.SEED_AUDITOR_PIN || '4444'],
 ];
 for (const [username, fullName, role, pin, employeeId] of seeds) {
@@ -600,7 +805,7 @@ for (const [username, fullName, role, pin, employeeId] of seeds) {
   }
   const hash = await bcrypt.hash(pin, 12);
   await pool.query(
-    'INSERT INTO app_users(username,full_name,role,pin_hash,employee_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(username) DO UPDATE SET employee_id=EXCLUDED.employee_id',
+    'INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) ON CONFLICT(username) DO UPDATE SET employee_id=EXCLUDED.employee_id',
     [username, fullName, role, hash, employeeId || null],
   );
 }
@@ -611,7 +816,7 @@ await provisionEmployeeAccounts(employeesForAccounts);
 await pool.query("UPDATE app_users SET active=FALSE,session_version=session_version+1 WHERE username='chihuy' AND employee_id IS NULL AND active=TRUE");
 
 if (!process.env.VERCEL) {
-  app.listen(port, '0.0.0.0', () => console.log(`Quản Trị Doanh Nghiệp listening on :${port}`));
+  app.listen(port, '0.0.0.0', () => console.log(`Quản trị doanh nghiệp listening on :${port}`));
 }
 
 export default app;

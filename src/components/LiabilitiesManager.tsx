@@ -344,7 +344,7 @@ export default function LiabilitiesManager({
 
   // --- HELPER FORMATTING MONEY ---
   const formatVND = (value: number) => {
-    return value.toLocaleString('vi-VN') + ' ₫';
+    return (Number(value) || 0).toLocaleString('vi-VN') + ' ₫';
   };
 
   // Resolve Project name
@@ -376,13 +376,13 @@ export default function LiabilitiesManager({
 
     contracts.forEach(c => {
       if (c.partnerType === 'Client') {
-        clientTotalValue += c.value;
-        clientTotalPaid += c.paidValue;
-        clientTotalAccepted += c.acceptedValue;
+        clientTotalValue += Number(c.value) || 0;
+        clientTotalPaid += Number(c.paidValue) || 0;
+        clientTotalAccepted += Number(c.acceptedValue) || 0;
       } else {
-        subTotalValue += c.value;
-        subTotalPaid += c.paidValue;
-        subTotalAccepted += c.acceptedValue;
+        subTotalValue += Number(c.value) || 0;
+        subTotalPaid += Number(c.paidValue) || 0;
+        subTotalAccepted += Number(c.acceptedValue) || 0;
       }
     });
 
@@ -1269,6 +1269,11 @@ export default function LiabilitiesManager({
   // Add Contract handler
   const handleAddContract = (e: React.FormEvent) => {
     e.preventDefault();
+    if (userRole !== 'CEO') {
+      alert('Chỉ Giám đốc được lập hợp đồng mới. Kế toán được theo dõi và cập nhật nghiệp vụ trên hợp đồng hiện có.');
+      setShowAddContractModal(false);
+      return;
+    }
     if (!newContractNo.trim() || !newContractTitle.trim() || !newContractProjectId || !newContractPartnerId || newContractValue <= 0) {
       alert('Vui lòng điền đầy đủ các thông tin hợp đồng và giá trị lớn hơn 0!');
       return;
@@ -1619,13 +1624,15 @@ export default function LiabilitiesManager({
           </button>
 
           {/* New Contract */}
-          <button
-            onClick={() => setShowAddContractModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Ký HĐ Mới</span>
-          </button>
+          {userRole === 'CEO' && (
+            <button
+              onClick={() => setShowAddContractModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Ký HĐ Mới</span>
+            </button>
+          )}
 
           {/* New Partner */}
           <button
@@ -2416,7 +2423,7 @@ export default function LiabilitiesManager({
       )}
 
       {/* -------------------- MODAL: KÝ HỢP ĐỒNG MỚI -------------------- */}
-      {showAddContractModal && (
+      {showAddContractModal && userRole === 'CEO' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden">
             <div className="bg-slate-900 text-white p-4 flex items-center justify-between">

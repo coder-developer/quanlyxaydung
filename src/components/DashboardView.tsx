@@ -125,6 +125,7 @@ export default function DashboardView({
 
   // Helper formatting money to VND
   const formatVND = (value: number) => {
+    value = Number(value) || 0;
     if (value >= 1000000000) {
       return (value / 1000000000).toFixed(1) + ' tỷ';
     }
@@ -153,7 +154,7 @@ export default function DashboardView({
           </p>
         </div>
         <div className="flex flex-col md:items-end font-mono text-[10px] bg-slate-950/40 p-3 rounded-xl border border-slate-850 shrink-0 gap-1 text-slate-300">
-          <div>ỨNG DỤNG: <strong className="text-blue-450 uppercase">{companyConfig?.appTitle || 'Quản Trị Doanh Nghiệp'}</strong></div>
+          <div>ỨNG DỤNG: <strong className="text-blue-450 uppercase">{companyConfig?.appTitle || 'Quản trị doanh nghiệp'}</strong></div>
           <div>PHIÊN BẢN: <strong className="text-slate-200">1.0 STANDARD</strong></div>
           <div>NGƯỜI KÝ DUYỆT CHÍNH: <strong className="text-emerald-400">{companyConfig?.directorName || 'Đỗ Minh Tuấn'}</strong></div>
         </div>
@@ -206,7 +207,7 @@ export default function DashboardView({
           <div className="space-y-1">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Vật Tư Tồn Kho Tổng</span>
             <div className="text-base font-extrabold text-slate-900 font-mono">
-              {inventoryItems.reduce((sum, item) => sum + item.onHand, 0).toLocaleString()} Đvị
+              {inventoryItems.reduce((sum, item) => sum + (Number(item.onHand) || 0), 0).toLocaleString()} Đvị
             </div>
             <div className="text-[10px] text-slate-500">5 danh mục vật tư chính</div>
           </div>

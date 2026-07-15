@@ -45,7 +45,7 @@ export default function CompanyConfigView({
   // Local state to manage edits before saving
   const [formConfig, setFormConfig] = useState<CompanyConfig>({
     ...companyConfig,
-    appTitle: companyConfig.appTitle || 'Quản Trị Doanh Nghiệp'
+    appTitle: companyConfig.appTitle || 'Quản trị doanh nghiệp'
   });
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,17 +71,17 @@ export default function CompanyConfigView({
   const handleResetToDefault = () => {
     if (window.confirm('Bạn có chắc chắn muốn khôi phục thông tin doanh nghiệp về mặc định ban đầu không?')) {
       const defaults: CompanyConfig = {
-        companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-        siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
-        directorName: 'Đỗ Minh Tuấn',
-        chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-        treasurerName: 'Lê Thị Thu',
-        technicianName: 'Trần Hải Nam',
+        companyName: 'Công Ty Cổ Phần Xây Dựng',
+        siteOffice: 'Tp Hồ Chí Minh',
+        directorName: '',
+        chiefAccountantName: '',
+        treasurerName: '',
+        technicianName: '',
         journalTitle: 'SỔ NHẬT KÝ CHUNG',
-        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-        fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
-        maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-        appTitle: 'Quản Trị Doanh Nghiệp',
+        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ',
+        fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU',
+        maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+        appTitle: 'Quản trị doanh nghiệp',
       };
       setFormConfig(defaults);
       setCompanyConfig(defaults);
@@ -94,23 +94,21 @@ export default function CompanyConfigView({
       showToast('Hành động khôi phục dữ liệu gốc hệ thống yêu cầu đặc quyền tối cao của Giám Đốc (CEO).', 'error');
       return;
     }
-    if (window.confirm('CẢNH BÁO: Thao tác này sẽ xóa toàn bộ dữ liệu hiện tại trong bộ nhớ trình duyệt và tải lại dữ liệu mô phỏng gốc. Bạn có chắc chắn muốn tiếp tục?')) {
-      onResetData();
-      setFormConfig({
-        companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-        siteOffice: 'Ban điều hành - Dự án cao tốc Bắc Nam',
-        directorName: 'Đỗ Minh Tuấn',
-        chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-        treasurerName: 'Lê Thị Thu',
-        technicianName: 'Trần Hải Nam',
+    onResetData();
+    setFormConfig({
+        companyName: 'Công Ty Cổ Phần Xây Dựng',
+        siteOffice: 'Tp Hồ Chí Minh',
+        directorName: '',
+        chiefAccountantName: '',
+        treasurerName: '',
+        technicianName: '',
         journalTitle: 'SỔ NHẬT KÝ CHUNG',
-        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-        fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU',
-        maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-        appTitle: 'Quản Trị Doanh Nghiệp',
-      });
-      showToast('Đã reset toàn bộ cơ sở dữ liệu ERP về mặc định gốc thành công!', 'success');
-    }
+        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ',
+        fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU',
+        maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+        appTitle: 'Quản trị doanh nghiệp',
+    });
+    showToast('Đã gửi yêu cầu reset hệ thống.', 'success');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,7 +126,7 @@ export default function CompanyConfigView({
           // Update local edit form state as well
           setFormConfig({
             ...json.companyConfig,
-            appTitle: json.companyConfig.appTitle || 'Quản Trị Doanh Nghiệp'
+            appTitle: json.companyConfig.appTitle || 'Quản trị doanh nghiệp'
           });
           showToast('Đã đồng bộ và khôi phục toàn bộ cơ sở dữ liệu từ file backup thành công!', 'success');
         }

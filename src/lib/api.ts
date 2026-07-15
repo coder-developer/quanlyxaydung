@@ -27,6 +27,8 @@ export async function apiRegister(username: string, employeeCode: string, phone:
 }
 
 export const apiChangePin = (currentPin: string, newPin: string) => apiFetch('/api/auth/change-pin', { method: 'POST', body: JSON.stringify({ currentPin, newPin }) }) as Promise<{ success: boolean }>;
+export const apiCurrentUser = () => apiFetch('/api/auth/me') as Promise<{ user: ApiUser }>;
+export const apiResetSystem = () => apiFetch('/api/admin/reset-system', { method: 'POST', body: JSON.stringify({ confirmation: 'RESET_TO_DEFAULT' }) }) as Promise<ServerState<Record<string, unknown>>>;
 export const syncServerBusinessIds = (mappings: Array<{ entityType: string; oldId: string; newId: string }>) => apiFetch('/api/admin/sync-business-ids', { method: 'POST', body: JSON.stringify({ mappings }) }) as Promise<{ success: boolean }>;
 
 export function apiLogout() {

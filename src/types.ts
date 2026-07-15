@@ -200,4 +200,4 @@ export interface CompanyConfig {
   requireDoubleApproval?: boolean;
 }
 
-export type UserRole = 'CEO' | 'Accountant' | 'SiteManager' | 'Auditor' | 'Employee';
+export type UserRole = 'CEO' | 'ChiefAccountant' | 'SiteAccountant' | 'SiteManager' | 'Auditor' | 'Employee';

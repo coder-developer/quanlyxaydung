@@ -324,7 +324,7 @@ export const dbRelationships: DbRelation[] = [
 export function generatePostgreSqlDdl(): string {
   let ddl = `-- =========================================================================\n`;
   ddl += `-- POSTGRESQL / CLOUD SQL DDL FOR TOTAL CONSTRUCTION ERP SYSTEM\n`;
-  ddl += `-- Lược đồ dữ liệu Quản Trị Doanh Nghiệp\n`;
+  ddl += `-- Lược đồ dữ liệu Quản trị doanh nghiệp\n`;
   ddl += `-- Đơn vị tiền tệ hạch toán: VND | Chuẩn định dạng: UUID & Foreign Key cascade\n`;
   ddl += `-- =========================================================================\n\n`;
 
