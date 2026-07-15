@@ -116,7 +116,7 @@ export async function migrate() {
     );
     INSERT INTO erp_state (id,payload) VALUES (1, jsonb_build_object(
       'companyConfig', jsonb_build_object(
-        'companyName','Công Ty Cổ Phần Xây Dựng','siteOffice','Tp Hồ Chí Minh','directorName','','chiefAccountantName','','treasurerName','','technicianName','',
+        'companyName','Công Ty Cổ Phần Xây Dựng','siteOffice','Tp Hồ Chí Minh','taxCode','','officeAddress','Tp Hồ Chí Minh','directorName','','chiefAccountantName','','treasurerName','','technicianName','',
         'journalTitle','SỔ NHẬT KÝ CHUNG','dispatchTitle','LỆNH ĐIỀU ĐỘNG THIẾT BỊ','fuelTitle','PHIẾU CẤP PHÁT NHIÊN LIỆU','maintenanceTitle','BIÊN BẢN BẢO TRÌ THIẾT BỊ',
         'appTitle','Quản trị doanh nghiệp','siteManagerApprovalLimit',50000000,'accountantApprovalLimit',200000000,'fuelVarianceThreshold',5,'maxDailyWorkHours',12,'requireDoubleApproval',true
       ),
@@ -132,6 +132,12 @@ export async function migrate() {
     UPDATE erp_state
     SET payload=jsonb_set(payload,'{companyConfig,siteOffice}',to_jsonb('Tp Hồ Chí Minh'::text),true)
     WHERE COALESCE(payload#>>'{companyConfig,siteOffice}','')='' OR LOWER(payload#>>'{companyConfig,siteOffice}') LIKE '%dã chiến%';
+    UPDATE erp_state
+    SET payload=jsonb_set(payload,'{companyConfig,taxCode}',to_jsonb(''::text),true)
+    WHERE payload#>'{companyConfig,taxCode}' IS NULL;
+    UPDATE erp_state
+    SET payload=jsonb_set(payload,'{companyConfig,officeAddress}',to_jsonb(COALESCE(NULLIF(payload#>>'{companyConfig,siteOffice}',''),'Tp Hồ Chí Minh')),true)
+    WHERE payload#>'{companyConfig,officeAddress}' IS NULL;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS employee_id TEXT;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS must_change_pin BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 1;

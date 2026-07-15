@@ -137,6 +137,8 @@ interface Client {
   contactPerson: string;
   phone: string;
   email: string;
+  taxCode?: string;
+  officeAddress?: string;
 }
 
 export default function LiabilitiesManager({
@@ -234,14 +236,15 @@ export default function LiabilitiesManager({
   const [newVoucherType, setNewVoucherType] = useState<'Receipt' | 'Payment'>('Receipt');
   const [newVoucherTemplate, setNewVoucherTemplate] = useState<string>('Thông tư 200/2014/TT-BTC');
   const [newVoucherUnitName, setNewVoucherUnitName] = useState<string>(companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT');
-  const [newVoucherUnitAddress, setNewVoucherUnitAddress] = useState<string>(companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh');
+  const [newVoucherUnitAddress, setNewVoucherUnitAddress] = useState<string>(companyConfig?.officeAddress || companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh');
 
   useEffect(() => {
     if (companyConfig) {
       setNewVoucherUnitName(companyConfig.companyName);
-      setNewVoucherUnitAddress(companyConfig.siteOffice);
-      setVouchersList(items => items.map(item => ({ ...item, unitName: companyConfig.companyName, unitAddress: companyConfig.siteOffice })));
-      setSelectedVoucher(item => item ? ({ ...item, unitName: companyConfig.companyName, unitAddress: companyConfig.siteOffice }) : item);
+      const officeAddress = companyConfig.officeAddress || companyConfig.siteOffice;
+      setNewVoucherUnitAddress(officeAddress);
+      setVouchersList(items => items.map(item => ({ ...item, unitName: companyConfig.companyName, unitAddress: officeAddress })));
+      setSelectedVoucher(item => item ? ({ ...item, unitName: companyConfig.companyName, unitAddress: officeAddress }) : item);
     }
   }, [companyConfig]);
   const [newVoucherBookNo, setNewVoucherBookNo] = useState<string>('Q-01');
@@ -313,6 +316,8 @@ export default function LiabilitiesManager({
   const [newPartnerContact, setNewPartnerContact] = useState('');
   const [newPartnerPhone, setNewPartnerPhone] = useState('');
   const [newPartnerEmail, setNewPartnerEmail] = useState('');
+  const [newPartnerTaxCode, setNewPartnerTaxCode] = useState('');
+  const [newPartnerOfficeAddress, setNewPartnerOfficeAddress] = useState('');
 
   // New Contract Form
   const [newContractNo, setNewContractNo] = useState('');
@@ -607,6 +612,8 @@ export default function LiabilitiesManager({
           <th style="width: 180px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Người đại diện liên hệ</th>
           <th style="width: 120px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Số điện thoại</th>
           <th style="width: 220px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Hòm thư điện tử (Email)</th>
+          <th style="width: 130px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Mã số thuế</th>
+          <th style="width: 280px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Địa chỉ văn phòng</th>
           <th style="width: 100px; background-color: #1e3a8a; color: #ffffff; font-weight: bold; border: 1px solid #475569; padding: 8px 6px;">Hợp đồng liên kết</th>
         </tr>
       `;
@@ -625,6 +632,8 @@ export default function LiabilitiesManager({
             <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${cli.contactPerson}</td>
             <td style="mso-number-format:'@'; border: 1px solid #cbd5e1; padding: 6px 8px;">${cli.phone}</td>
             <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${cli.email}</td>
+            <td style="mso-number-format:'@'; border: 1px solid #cbd5e1; padding: 6px 8px;">${cli.taxCode || ''}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${cli.officeAddress || ''}</td>
             <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 6px 8px;">${contractCount} HĐ</td>
           </tr>
         `;
@@ -642,6 +651,8 @@ export default function LiabilitiesManager({
             <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.contactPerson}</td>
             <td style="mso-number-format:'@'; border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.phone}</td>
             <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.email}</td>
+            <td style="mso-number-format:'@'; border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.taxCode || ''}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 6px 8px;">${ctr.officeAddress || ''}</td>
             <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 6px 8px;">${contractCount} HĐ</td>
           </tr>
         `;
@@ -690,7 +701,7 @@ export default function LiabilitiesManager({
           <tr>
             <td style="width: 50%; font-family: 'Times New Roman';">
               <span class="company-title"><strong>${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</strong></span><br>
-              <span style="font-size: 8.5pt; font-weight: normal; color: #64748b;">${companyConfig?.siteOffice || 'Hệ thống Quản lý Live Operations & Financial P&L'}</span>
+              <span style="font-size: 8.5pt; font-weight: normal; color: #64748b;">${companyConfig?.officeAddress || companyConfig?.siteOffice || ''}${companyConfig?.taxCode ? ` • MST: ${companyConfig.taxCode}` : ''}</span>
             </td>
             <td style="text-align: right; width: 50%; font-style: italic; font-family: 'Times New Roman'; font-size: 10pt;">
               Mẫu báo cáo số: OS-FIN-${type.toUpperCase()}-01<br>
@@ -763,7 +774,8 @@ export default function LiabilitiesManager({
 
     const d = new Date(v.date);
     const companyName = (companyConfig?.companyName || v.unitName).trim();
-    const companyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
+    const companyAddress = (companyConfig?.officeAddress || companyConfig?.siteOffice || v.unitAddress).trim();
+    const companyTaxCode = (companyConfig?.taxCode || '').trim();
     const director = companyConfig?.directorName || '';
     const accountant = companyConfig?.chiefAccountantName || '';
     const treasurer = companyConfig?.treasurerName || '';
@@ -805,7 +817,7 @@ export default function LiabilitiesManager({
         </head>
         <body>
           <main class="sheet">
-            <table><tr><td class="head-left"><div class="company">${companyName}</div><div class="address">Địa chỉ: ${companyAddress}</div></td><td class="head-right"><strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br><em>(Ban hành theo chế độ kế toán doanh nghiệp hiện hành)</em></td></tr></table>
+            <table><tr><td class="head-left"><div class="company">${companyName}</div><div class="address">Địa chỉ: ${companyAddress}</div>${companyTaxCode ? `<div class="address">Mã số thuế: ${companyTaxCode}</div>` : ''}</td><td class="head-right"><strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br><em>(Ban hành theo chế độ kế toán doanh nghiệp hiện hành)</em></td></tr></table>
             <h1>${voucherTitle}</h1>
             <div class="date">Ngày ${d.getDate()} tháng ${d.getMonth() + 1} năm ${d.getFullYear()}</div>
             <table class="meta"><tr><td><strong>Quyển số:</strong> ${v.bookNo}<br><strong>Số:</strong> ${v.voucherNo}<br>Nợ: ${v.debitAccount}<br>Có: ${v.creditAccount}</td></tr></table>
@@ -830,7 +842,8 @@ export default function LiabilitiesManager({
     const filename = `${v.type === 'Receipt' ? 'Phieu_Thu' : 'Phieu_Chi'}_${v.voucherNo}.xls`;
     const d = new Date(v.date);
     const exportCompanyName = (companyConfig?.companyName || v.unitName).trim();
-    const exportCompanyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
+    const exportCompanyAddress = (companyConfig?.officeAddress || companyConfig?.siteOffice || v.unitAddress).trim();
+    const exportCompanyTaxCode = (companyConfig?.taxCode || '').trim();
 
     const htmlContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -867,6 +880,7 @@ export default function LiabilitiesManager({
               ${v.type === 'Receipt' ? '(Ban hành theo Thông tư số 200/2014/TT-BTC<br>Ngày 22/12/2014 của Bộ Tài chính)' : '(Kèm theo Thông tư số 99/2025/TT-BTC<br>ngày 27 tháng 10 năm 2025 của Bộ trưởng Bộ Tài chính)'}
             </td>
           </tr>
+          ${exportCompanyTaxCode ? `<tr><td colspan="3" style="text-align: left; font-size: 9.5pt; color: #475569;">Mã số thuế: ${exportCompanyTaxCode}</td></tr>` : ''}
 
           <tr><td colspan="6" style="height: 15px;"></td></tr>
 
@@ -1009,7 +1023,8 @@ export default function LiabilitiesManager({
     const filename = `${v.type === 'Receipt' ? 'Phieu_Thu' : 'Phieu_Chi'}_${v.voucherNo}.doc`;
     const d = new Date(v.date);
     const exportCompanyName = (companyConfig?.companyName || v.unitName).trim();
-    const exportCompanyAddress = (companyConfig?.siteOffice || v.unitAddress).trim();
+    const exportCompanyAddress = (companyConfig?.officeAddress || companyConfig?.siteOffice || v.unitAddress).trim();
+    const exportCompanyTaxCode = (companyConfig?.taxCode || '').trim();
 
     const htmlContent = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
@@ -1061,7 +1076,8 @@ export default function LiabilitiesManager({
           <tr>
             <td style="width: 55%; font-weight: bold;">
               ĐƠN VỊ: ${exportCompanyName.toUpperCase()}<br>
-              <span style="font-weight: normal; font-style: italic;">Địa chỉ: ${exportCompanyAddress}</span>
+              <span style="font-weight: normal; font-style: italic;">Địa chỉ: ${exportCompanyAddress}</span><br/>
+              ${exportCompanyTaxCode ? `<span style="font-weight: normal;">Mã số thuế: ${exportCompanyTaxCode}</span>` : ''}
             </td>
             <td style="width: 45%; text-align: center;">
               <strong>${v.type === 'Receipt' ? 'Mẫu số 01 - TT' : 'Mẫu số 02 - TT'}</strong><br>
@@ -1222,12 +1238,21 @@ export default function LiabilitiesManager({
   // Add Partner handler
   const handleAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartnerCode.trim() || !newPartnerName.trim() || !newPartnerContact.trim() || !newPartnerPhone.trim()) {
+    if (!newPartnerCode.trim() || !newPartnerName.trim() || !newPartnerTaxCode.trim() || !newPartnerOfficeAddress.trim() || !newPartnerContact.trim() || !newPartnerPhone.trim()) {
       alert('Vui lòng điền đầy đủ các trường thông tin đối tác!');
       return;
     }
 
     const newId = normalizeBusinessId(newPartnerCode, `DT-${String(contractors.length + 1).padStart(3, '0')}`);
+    const normalizedTaxCode = newPartnerTaxCode.trim().toUpperCase();
+    if (!/^[A-Z0-9.-]{5,30}$/.test(normalizedTaxCode)) {
+      alert('Mã số thuế chỉ gồm chữ, số, dấu chấm hoặc gạch ngang và dài 5–30 ký tự.');
+      return;
+    }
+    if ([...contractors, ...clients].some(item => String(item.taxCode || '').trim().toUpperCase() === normalizedTaxCode)) {
+      alert(`Mã số thuế ${normalizedTaxCode} đã được sử dụng cho đối tác khác.`);
+      return;
+    }
     if (contractors.some(item => item.id === newId || item.code === newId) || clients.some(item => item.id === newId)) {
       alert(`Mã đối tác ${newId} đã tồn tại.`);
       return;
@@ -1238,7 +1263,9 @@ export default function LiabilitiesManager({
         name: newPartnerName,
         contactPerson: newPartnerContact,
         phone: newPartnerPhone,
-        email: newPartnerEmail || `${newId}@enterprise.com`
+        email: newPartnerEmail || `${newId}@enterprise.com`,
+        taxCode: normalizedTaxCode,
+        officeAddress: newPartnerOfficeAddress.trim()
       };
       setClients(prev => [...prev, newClientObj]);
       showToast(`Đã thêm mới Chủ đầu tư: ${newPartnerName}`);
@@ -1251,6 +1278,8 @@ export default function LiabilitiesManager({
         contactPerson: newPartnerContact,
         phone: newPartnerPhone,
         email: newPartnerEmail || `${newId}@subcontractor.com`,
+        taxCode: normalizedTaxCode,
+        officeAddress: newPartnerOfficeAddress.trim(),
         rating: 5.0
       };
       setContractors(prev => [...prev, newContractorObj]);
@@ -1263,6 +1292,8 @@ export default function LiabilitiesManager({
     setNewPartnerContact('');
     setNewPartnerPhone('');
     setNewPartnerEmail('');
+    setNewPartnerTaxCode('');
+    setNewPartnerOfficeAddress('');
     setShowAddPartnerModal(false);
   };
 
@@ -1820,6 +1851,7 @@ export default function LiabilitiesManager({
                   <th className="px-4 py-3 text-left">Người đại diện liên hệ</th>
                   <th className="px-4 py-3 text-left">Số điện thoại</th>
                   <th className="px-4 py-3 text-left">Thư điện tử (Email)</th>
+                  <th className="px-4 py-3 text-left">MST & Địa chỉ văn phòng</th>
                   <th className="px-4 py-3 text-center">Liên kết hợp đồng</th>
                 </tr>
               </thead>
@@ -1838,6 +1870,7 @@ export default function LiabilitiesManager({
                       <td className="px-4 py-3 text-slate-700">{cli.contactPerson}</td>
                       <td className="px-4 py-3 font-mono text-slate-600">{cli.phone}</td>
                       <td className="px-4 py-3 text-slate-500">{cli.email}</td>
+                      <td className="px-4 py-3"><div className="font-mono text-xs font-bold">{cli.taxCode || '—'}</div><div className="mt-1 max-w-64 text-xs text-slate-500">{cli.officeAddress || 'Chưa cập nhật'}</div></td>
                       <td className="px-4 py-3 text-center font-mono font-bold text-slate-800">{contractCount} Hợp đồng</td>
                     </tr>
                   );
@@ -1859,6 +1892,7 @@ export default function LiabilitiesManager({
                       <td className="px-4 py-3 text-slate-700">{ctr.contactPerson}</td>
                       <td className="px-4 py-3 font-mono text-slate-600">{ctr.phone}</td>
                       <td className="px-4 py-3 text-slate-500">{ctr.email}</td>
+                      <td className="px-4 py-3"><div className="font-mono text-xs font-bold">{ctr.taxCode || '—'}</div><div className="mt-1 max-w-64 text-xs text-slate-500">{ctr.officeAddress || 'Chưa cập nhật'}</div></td>
                       <td className="px-4 py-3 text-center font-mono font-bold text-slate-800">{contractCount} Hợp đồng</td>
                     </tr>
                   );
@@ -2049,9 +2083,10 @@ export default function LiabilitiesManager({
                             }}
                             className="hover:bg-amber-50 focus:bg-amber-50 focus:outline-none p-0.5 rounded cursor-pointer border-b border-slate-200"
                           >
-                            {companyConfig?.siteOffice || selectedVoucher.unitAddress}
+                            {companyConfig?.officeAddress || companyConfig?.siteOffice || selectedVoucher.unitAddress}
                           </span>
                         </div>
+                        {companyConfig?.taxCode && <div className="mt-1 text-[10px] text-slate-500">Mã số thuế: <span className="font-mono font-bold text-slate-700">{companyConfig.taxCode}</span></div>}
                       </div>
 
                       <div className="w-[45%] text-center space-y-1">
@@ -2400,6 +2435,31 @@ export default function LiabilitiesManager({
                   onChange={(e) => setNewPartnerEmail(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-lg"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="text-slate-400 block mb-1">Mã số thuế *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: 0312345678"
+                    value={newPartnerTaxCode}
+                    onChange={(e) => setNewPartnerTaxCode(e.target.value.toUpperCase())}
+                    className="w-full p-2 border border-slate-200 rounded-lg font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Địa chỉ văn phòng *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Địa chỉ trụ sở/văn phòng đối tác"
+                    value={newPartnerOfficeAddress}
+                    onChange={(e) => setNewPartnerOfficeAddress(e.target.value)}
+                    className="w-full p-2 border border-slate-200 rounded-lg"
+                  />
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">

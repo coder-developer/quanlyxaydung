@@ -42,6 +42,8 @@ export interface Contractor {
   contactPerson: string;
   phone: string;
   email: string;
+  taxCode?: string;
+  officeAddress?: string;
   rating: number;
 }
 
@@ -181,6 +183,8 @@ export interface ConstructionTask {
 export interface CompanyConfig {
   companyName: string;
   siteOffice: string;
+  taxCode?: string;
+  officeAddress?: string;
   directorName: string;
   chiefAccountantName: string;
   treasurerName: string;

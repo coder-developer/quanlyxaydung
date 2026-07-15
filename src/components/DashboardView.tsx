@@ -152,6 +152,7 @@ export default function DashboardView({
             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>{companyConfig?.siteOffice || 'Ban điều hành '}</span>
           </p>
+          <p className="text-[10px] text-slate-400">Văn phòng: {companyConfig?.officeAddress || companyConfig?.siteOffice || 'Chưa cập nhật'} • MST: {companyConfig?.taxCode || 'Chưa cập nhật'}</p>
         </div>
         <div className="flex flex-col md:items-end font-mono text-[10px] bg-slate-950/40 p-3 rounded-xl border border-slate-850 shrink-0 gap-1 text-slate-300">
           <div>ỨNG DỤNG: <strong className="text-blue-450 uppercase">{companyConfig?.appTitle || 'Quản trị doanh nghiệp'}</strong></div>

@@ -73,6 +73,8 @@ export default function CompanyConfigView({
       const defaults: CompanyConfig = {
         companyName: 'Công Ty Cổ Phần Xây Dựng',
         siteOffice: 'Tp Hồ Chí Minh',
+        taxCode: '',
+        officeAddress: 'Tp Hồ Chí Minh',
         directorName: '',
         chiefAccountantName: '',
         treasurerName: '',
@@ -98,6 +100,8 @@ export default function CompanyConfigView({
     setFormConfig({
         companyName: 'Công Ty Cổ Phần Xây Dựng',
         siteOffice: 'Tp Hồ Chí Minh',
+        taxCode: '',
+        officeAddress: 'Tp Hồ Chí Minh',
         directorName: '',
         chiefAccountantName: '',
         treasurerName: '',
@@ -223,6 +227,28 @@ export default function CompanyConfigView({
                     placeholder="Nhập tên công ty..."
                     required
                   />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Mã số thuế</label>
+                    <input
+                      type="text"
+                      value={formConfig.taxCode || ''}
+                      onChange={(e) => handleChange('taxCode', e.target.value.trimStart().toUpperCase())}
+                      className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      placeholder="Ví dụ: 0312345678"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Địa chỉ văn phòng</label>
+                    <input
+                      type="text"
+                      value={formConfig.officeAddress || ''}
+                      onChange={(e) => handleChange('officeAddress', e.target.value)}
+                      className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      placeholder="Nhập địa chỉ trụ sở/văn phòng..."
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -827,7 +853,8 @@ export default function CompanyConfigView({
               <div className="flex justify-between items-start border-b border-dashed border-slate-100 pb-2">
                 <div className="space-y-0.5">
                   <div className="font-bold text-[9px] uppercase text-slate-900 leading-tight">{formConfig.companyName}</div>
-                  <div className="text-slate-500 font-sans text-[8px]">{formConfig.siteOffice}</div>
+                  <div className="text-slate-500 font-sans text-[8px]">{formConfig.officeAddress || formConfig.siteOffice}</div>
+                  {formConfig.taxCode && <div className="text-slate-500 font-sans text-[8px]">MST: {formConfig.taxCode}</div>}
                 </div>
                 <div className="text-right text-[8px] font-sans">
                   <span className="font-bold text-slate-900">Mẫu số S03a-DN</span><br/>

@@ -28,7 +28,7 @@ const employeeMatchesId = (employee: EmployeeAccountSource | undefined, employee
 };
 
 const DEFAULT_COMPANY_CONFIG = {
-  companyName: 'Công Ty Cổ Phần Xây Dựng', siteOffice: 'Tp Hồ Chí Minh', directorName: '', chiefAccountantName: '', treasurerName: '', technicianName: '',
+  companyName: 'Công Ty Cổ Phần Xây Dựng', siteOffice: 'Tp Hồ Chí Minh', taxCode: '', officeAddress: 'Tp Hồ Chí Minh', directorName: '', chiefAccountantName: '', treasurerName: '', technicianName: '',
   journalTitle: 'SỔ NHẬT KÝ CHUNG', dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ', fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU', maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
   appTitle: 'Quản trị doanh nghiệp', siteManagerApprovalLimit: 50_000_000, accountantApprovalLimit: 200_000_000, fuelVarianceThreshold: 5, maxDailyWorkHours: 12, requireDoubleApproval: true,
 };

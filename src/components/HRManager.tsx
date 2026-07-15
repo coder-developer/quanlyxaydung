@@ -1370,7 +1370,8 @@ export default function HRManager({
               </tr>
               <tr>
                 <td style="width:100%; padding:2.0pt 0; font-size:13.0pt;">
-                  - Địa chỉ: ${companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}
+                  - Địa chỉ văn phòng: ${companyConfig?.officeAddress || companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}<br/>
+                  - Mã số thuế: ${companyConfig?.taxCode || ''}
                 </td>
               </tr>
               <tr>
@@ -3835,7 +3836,8 @@ export default function HRManager({
                     </h4>
                     <div style={{ paddingLeft: '0.6cm', fontSize: '13pt' }}>
                       <p style={docPNoIndentStyle}>
-                        Địa chỉ : {companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}
+                        Địa chỉ văn phòng : {companyConfig?.officeAddress || companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}<br/>
+                        Mã số thuế : {companyConfig?.taxCode || ''}
                       </p>
                       <p style={docPNoIndentStyle}>
                         Mã số doanh nghiệp : 0317555888

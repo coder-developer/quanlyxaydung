@@ -78,6 +78,8 @@ export const dbTables: DbTable[] = [
       { name: 'contact_person', type: 'VARCHAR(100)', description: 'Người đại diện liên hệ.' },
       { name: 'phone', type: 'VARCHAR(20)', description: 'Số điện thoại liên hệ.' },
       { name: 'email', type: 'VARCHAR(100)', description: 'Địa chỉ email gửi hóa đơn/đơn hàng.' },
+      { name: 'tax_code', type: 'VARCHAR(20)', description: 'Mã số thuế của pháp nhân đối tác.' },
+      { name: 'office_address', type: 'VARCHAR(500)', description: 'Địa chỉ trụ sở hoặc văn phòng giao dịch của đối tác.' },
       { name: 'rating', type: 'DECIMAL(2, 1)', constraints: ['DEFAULT 5.0'], description: 'Đánh giá năng lực đối tác (1.0 đến 5.0).' }
     ]
   },
