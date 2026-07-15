@@ -3,7 +3,7 @@ set -eu
 
 APP_DIR="${APP_DIR:-/opt/quanlyxaydung}"
 REPO_URL="${REPO_URL:-https://github.com/coder-developer/quanlyxaydung.git}"
-REPO_REF="${REPO_REF:-main}"
+REPO_REF="${REPO_REF:-v1.1.0}"
 APP_PORT="${APP_PORT:-8080}"
 
 if [ "$(id -u)" -ne 0 ]; then
