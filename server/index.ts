@@ -396,7 +396,10 @@ app.get('/api/realtime/events', authenticate, async (req, res) => {
   const after = Number(rawAfter);
   if (!Number.isSafeInteger(after) || after < 0) return res.status(400).json({ error: 'Con trỏ realtime không hợp lệ.' });
 
-  await ensureRealtimeListener();
+  // Kết nối PostgreSQL trực tiếp trên VPS/container hỗ trợ LISTEN/NOTIFY. Các
+  // proxy database serverless có thể giữ NOTIFY đến hết invocation, nên Vercel
+  // dùng truy vấn ngắn định kỳ ngay trong long-poll để vẫn phản hồi tức thì.
+  if (!process.env.VERCEL) await ensureRealtimeListener();
   const readEvents = () => pool.query(
     'SELECT id,channel,event_type,created_at FROM realtime_events WHERE id>$1 ORDER BY id ASC LIMIT 100',
     [after],
@@ -404,11 +407,29 @@ app.get('/api/realtime/events', authenticate, async (req, res) => {
   let result = await readEvents();
   if (!result.rowCount) {
     await new Promise<void>(resolve => {
-      const finish = () => { clearTimeout(timer); realtimeSignal.off('change', finish); resolve(); };
+      let checking = false;
+      const finish = () => {
+        clearTimeout(timer);
+        clearInterval(pollTimer);
+        realtimeSignal.off('change', finish);
+        resolve();
+      };
       const timer = setTimeout(finish, 8_000);
-      realtimeSignal.once('change', finish);
+      const pollTimer = setInterval(async () => {
+        if (checking) return;
+        checking = true;
+        try {
+          const pending = await readEvents();
+          if (pending.rowCount) { result = pending; finish(); }
+        } catch (error) {
+          console.error('Không thể kiểm tra sự kiện realtime:', error);
+        } finally {
+          checking = false;
+        }
+      }, process.env.VERCEL ? 750 : 2_000);
+      if (!process.env.VERCEL) realtimeSignal.once('change', finish);
     });
-    result = await readEvents();
+    if (!result.rowCount) result = await readEvents();
   }
   const cursor = result.rowCount ? Number(result.rows[result.rows.length - 1].id) : after;
   res.json({ cursor, events: result.rows });
