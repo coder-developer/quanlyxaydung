@@ -38,7 +38,7 @@ export interface Contractor {
   id: string;
   code?: string;
   name: string;
-  type: 'Subcontractor' | 'Supplier';
+  type: 'Subcontractor' | 'Supplier' | 'Client';
   contactPerson: string;
   phone: string;
   email: string;

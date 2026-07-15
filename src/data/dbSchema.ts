@@ -74,7 +74,7 @@ export const dbTables: DbTable[] = [
     columns: [
       { name: 'id', type: 'UUID', constraints: ['PRIMARY KEY', 'DEFAULT gen_random_uuid()'], description: 'Mã nhà thầu / nhà cung cấp.' },
       { name: 'name', type: 'VARCHAR(255)', constraints: ['NOT NULL'], description: 'Tên pháp nhân công ty hoặc tên đội trưởng đội thầu.' },
-      { name: 'type', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (type IN (\'Subcontractor\', \'Supplier\'))'], description: 'Phân loại đối tác: Subcontractor (Nhà thầu phụ) hoặc Supplier (Nhà cung cấp vật tư).' },
+      { name: 'type', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (type IN (\'Subcontractor\', \'Supplier\', \'Client\'))'], description: 'Phân loại đối tác: Subcontractor (Nhà thầu phụ), Supplier (Nhà cung cấp vật tư) hoặc Client (Chủ đầu tư).' },
       { name: 'contact_person', type: 'VARCHAR(100)', description: 'Người đại diện liên hệ.' },
       { name: 'phone', type: 'VARCHAR(20)', description: 'Số điện thoại liên hệ.' },
       { name: 'email', type: 'VARCHAR(100)', description: 'Địa chỉ email gửi hóa đơn/đơn hàng.' },

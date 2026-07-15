@@ -141,9 +141,17 @@ interface Client {
   officeAddress?: string;
 }
 
+const SEEDED_CLIENTS: Client[] = [
+  { id: 'client-gr', name: 'Tập đoàn BĐS Sông Xanh', contactPerson: 'Nguyễn Văn Hải', phone: '0905.111.222', email: 'contact@songxanhland.vn' },
+  { id: 'client-sg-gt', name: 'Sở Giao thông Vận tải TP.HCM', contactPerson: 'Phòng QLDA 1', phone: '028.3829.1422', email: 'sgtvt@tphcm.gov.vn' },
+  { id: 'client-techhub', name: 'Công ty CP Đầu tư TechHub', contactPerson: 'Lê Minh Trí', phone: '0918.444.555', email: 'tri.lm@techhubtower.com' },
+  { id: 'client-ecoland', name: 'Tập đoàn Địa ốc EcoLand', contactPerson: 'Phạm Hoàng Nam', phone: '0982.555.777', email: 'info@ecoland.com.vn' },
+  { id: 'client-vinasemi', name: 'Tập đoàn Công nghệ VinaSemi', contactPerson: 'Trần Anh Tuấn', phone: '0903.666.888', email: 'tuan.ta@vinasemi.vn' }
+];
+
 export default function LiabilitiesManager({
   projects,
-  contractors,
+  contractors: partnerRecords,
   setContractors,
   contracts,
   setContracts,
@@ -153,6 +161,12 @@ export default function LiabilitiesManager({
   companyConfig,
   userRole
 }: LiabilitiesManagerProps) {
+  const contractors = useMemo(() => partnerRecords.filter(item => item.type !== 'Client'), [partnerRecords]);
+  const clients = useMemo<Client[]>(() => {
+    const persisted = partnerRecords.filter(item => item.type === 'Client');
+    const persistedIds = new Set(persisted.map(item => item.id));
+    return [...SEEDED_CLIENTS.filter(item => !persistedIds.has(item.id)), ...persisted];
+  }, [partnerRecords]);
   // --- SUB-TABS within Liabilities Manager ---
   const [subTab, setSubTab] = useState<'clients' | 'subcontractors' | 'partners' | 'vouchers'>('clients');
 
@@ -288,15 +302,6 @@ export default function LiabilitiesManager({
     setNewVoucherAmountWords(words);
     setNewVoucherConvertedAmount(amount.toLocaleString('vi-VN') + ' ₫');
   };
-
-  // --- INTERNAL CLIENTS STATE ---
-  const [clients, setClients] = useState<Client[]>([
-    { id: 'client-gr', name: 'Tập đoàn BĐS Sông Xanh', contactPerson: 'Nguyễn Văn Hải', phone: '0905.111.222', email: 'contact@songxanhland.vn' },
-    { id: 'client-sg-gt', name: 'Sở Giao thông Vận tải TP.HCM', contactPerson: 'Phòng QLDA 1', phone: '028.3829.1422', email: 'sgtvt@tphcm.gov.vn' },
-    { id: 'client-techhub', name: 'Công ty CP Đầu tư TechHub', contactPerson: 'Lê Minh Trí', phone: '0918.444.555', email: 'tri.lm@techhubtower.com' },
-    { id: 'client-ecoland', name: 'Tập đoàn Địa ốc EcoLand', contactPerson: 'Phạm Hoàng Nam', phone: '0982.555.777', email: 'info@ecoland.com.vn' },
-    { id: 'client-vinasemi', name: 'Tập đoàn Công nghệ VinaSemi', contactPerson: 'Trần Anh Tuấn', phone: '0903.666.888', email: 'tuan.ta@vinasemi.vn' }
-  ]);
 
   // --- FILTERS & SEARCHES ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -1258,16 +1263,19 @@ export default function LiabilitiesManager({
       return;
     }
     if (newPartnerType === 'Client') {
-      const newClientObj: Client = {
+      const newClientObj: Contractor = {
         id: newId,
+        code: newId,
         name: newPartnerName,
+        type: 'Client',
         contactPerson: newPartnerContact,
         phone: newPartnerPhone,
         email: newPartnerEmail || `${newId}@enterprise.com`,
         taxCode: normalizedTaxCode,
-        officeAddress: newPartnerOfficeAddress.trim()
+        officeAddress: newPartnerOfficeAddress.trim(),
+        rating: 5.0
       };
-      setClients(prev => [...prev, newClientObj]);
+      setContractors(prev => [...prev, newClientObj]);
       showToast(`Đã thêm mới Chủ đầu tư: ${newPartnerName}`);
     } else {
       const newContractorObj: Contractor = {
