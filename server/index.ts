@@ -799,20 +799,29 @@ const seeds: Array<[string, string, Role, string, string?]> = [
   ['ketoan', 'Kế toán trưởng', 'ChiefAccountant', process.env.SEED_ACCOUNTANT_PIN || '2222'],
   ['kiemtoan', 'Kiểm toán viên', 'Auditor', process.env.SEED_AUDITOR_PIN || '4444'],
 ];
+const existingSeedUsers = await pool.query('SELECT username FROM app_users WHERE username=ANY($1::text[])', [seeds.map(([username]) => username)]);
+const existingSeedUsernames = new Set(existingSeedUsers.rows.map(row => String(row.username)));
 for (const [username, fullName, role, pin, employeeId] of seeds) {
   if (process.env.NODE_ENV === 'production' && (!pin || pin === 'CHANGE_ME' || pin.length < 6)) {
     throw new Error(`Mật khẩu production cho tài khoản ${username} phải có ít nhất 6 chữ số và không được để mặc định.`);
   }
-  const hash = await bcrypt.hash(pin, 12);
-  await pool.query(
-    'INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) ON CONFLICT(username) DO UPDATE SET employee_id=EXCLUDED.employee_id',
-    [username, fullName, role, hash, employeeId || null],
-  );
+  if (!existingSeedUsernames.has(username)) {
+    const hash = await bcrypt.hash(pin, 12);
+    await pool.query(
+      'INSERT INTO app_users(username,full_name,role,pin_hash,employee_id,must_change_pin) VALUES($1,$2,$3,$4,$5,TRUE) ON CONFLICT(username) DO NOTHING',
+      [username, fullName, role, hash, employeeId || null],
+    );
+  }
 }
 
-const stateForAccounts = await pool.query('SELECT payload FROM erp_state WHERE id=1');
-const employeesForAccounts = Array.isArray(stateForAccounts.rows[0]?.payload?.employees) ? stateForAccounts.rows[0].payload.employees : [];
-await provisionEmployeeAccounts(employeesForAccounts);
+// Container/VPS performs a complete account reconciliation when starting. On
+// Vercel, doing dozens of sequential queries during every cold start causes
+// function timeouts; account provisioning still runs whenever ERP state changes.
+if (!process.env.VERCEL) {
+  const stateForAccounts = await pool.query('SELECT payload FROM erp_state WHERE id=1');
+  const employeesForAccounts = Array.isArray(stateForAccounts.rows[0]?.payload?.employees) ? stateForAccounts.rows[0].payload.employees : [];
+  await provisionEmployeeAccounts(employeesForAccounts);
+}
 await pool.query("UPDATE app_users SET active=FALSE,session_version=session_version+1 WHERE username='chihuy' AND employee_id IS NULL AND active=TRUE");
 
 if (!process.env.VERCEL) {
