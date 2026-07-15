@@ -38,10 +38,18 @@ Bản VPS gồm React, API Node.js và PostgreSQL. Dữ liệu được dùng ch
 Trên VPS Ubuntu/Debian/RHEL mới, chạy:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/v1.1.1/install-vps.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/v1.1.2/install-vps.sh | sudo sh
 ```
 
 Trình cài tự cài Docker, tạo bí mật ngẫu nhiên, build container, kiểm tra health và cài lịch backup. Thông tin đăng nhập CEO ban đầu được lưu tại `/opt/quanlyxaydung/.installation-credentials` với quyền chỉ root đọc. Có thể truyền `REPO_REF` để cài phiên bản khác hoặc tải gói ZIP VPS và chạy `sudo sh install-vps.sh` trong thư mục đã giải nén.
+
+Để cài luôn tên miền bên ngoài và HTTPS tự động, trỏ DNS về VPS rồi chạy đúng một lệnh:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/coder-developer/quanlyxaydung/v1.1.2/install-vps.sh | sudo env DOMAIN=erp.tencongty.vn ACME_EMAIL=admin@tencongty.vn sh
+```
+
+Caddy tự xin và gia hạn SSL Let's Encrypt. Chi tiết nằm trong `deploy/CAI-DAT-TEN-MIEN-1-CLICK.md`.
 
 Khi một máy thay đổi dữ liệu, app tự lưu sau khoảng 1,5 giây. Các máy khác đang đăng nhập kiểm tra phiên bản máy chủ mỗi 5 giây và tự tải dữ liệu mới nếu không có chỉnh sửa cục bộ chưa lưu. Nếu hai máy sửa cùng lúc, app hiển thị cảnh báo xung đột thay vì âm thầm ghi đè.
 
@@ -53,7 +61,7 @@ docker compose ps
 curl http://127.0.0.1:8080/api/health
 ```
 
-Mặc định app mở tại cổng `8080`. Khi dùng tên miền, đặt Nginx hoặc Caddy phía trước để cấp HTTPS; không nên công khai PostgreSQL ra Internet.
+Mặc định app mở tại cổng `8080`. Khi truyền `DOMAIN`, app chỉ bind cổng nội bộ `127.0.0.1:8080` và Caddy công khai HTTPS qua cổng 443; PostgreSQL không được công khai ra Internet.
 
 Sao lưu PostgreSQL thủ công:
 

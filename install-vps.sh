@@ -3,8 +3,10 @@ set -eu
 
 APP_DIR="${APP_DIR:-/opt/quanlyxaydung}"
 REPO_URL="${REPO_URL:-https://github.com/coder-developer/quanlyxaydung.git}"
-REPO_REF="${REPO_REF:-v1.1.1}"
+REPO_REF="${REPO_REF:-v1.1.2}"
 APP_PORT="${APP_PORT:-8080}"
+DOMAIN="${DOMAIN:-}"
+ACME_EMAIL="${ACME_EMAIL:-}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Vui lòng chạy bằng root: sudo sh install-vps.sh" >&2
@@ -31,6 +33,16 @@ random_secret() {
   openssl rand -hex "$1"
 }
 
+set_env_value() {
+  key="$1"
+  value="$2"
+  if grep -q "^${key}=" .env; then
+    sed -i "s|^${key}=.*|${key}=${value}|" .env
+  else
+    printf '%s=%s\n' "$key" "$value" >> .env
+  fi
+}
+
 install_packages
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -40,7 +52,11 @@ systemctl enable --now docker 2>/dev/null || service docker start
 docker compose version >/dev/null
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || true)"
-if [ -n "$script_dir" ] && [ -f "$script_dir/docker-compose.yml" ]; then
+case "$0" in
+  */install-vps.sh|install-vps.sh) local_package=true ;;
+  *) local_package=false ;;
+esac
+if [ "$local_package" = true ] && [ -n "$script_dir" ] && [ -f "$script_dir/docker-compose.yml" ]; then
   APP_DIR="$script_dir"
 else
   if [ -d "$APP_DIR/.git" ]; then
@@ -62,6 +78,18 @@ fi
 
 cd "$APP_DIR"
 
+if [ -n "$DOMAIN" ]; then
+  echo "$DOMAIN" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$' || { echo "Tên miền không hợp lệ: $DOMAIN" >&2; exit 1; }
+  case "$DOMAIN" in
+    *.*) ;;
+    *) echo "Tên miền phải là FQDN, ví dụ erp.tencongty.vn." >&2; exit 1 ;;
+  esac
+  [ -n "$ACME_EMAIL" ] || ACME_EMAIL="admin@$DOMAIN"
+  install_url="https://$DOMAIN"
+else
+  install_url="http://$(hostname -I 2>/dev/null | awk '{print $1}'):$APP_PORT"
+fi
+
 if [ ! -f .env ]; then
   umask 077
   postgres_password="$(random_secret 24)"
@@ -74,6 +102,7 @@ if [ ! -f .env ]; then
 
   cat > .env <<EOF
 APP_PORT=$APP_PORT
+APP_BIND=${DOMAIN:+127.0.0.1}
 POSTGRES_PASSWORD=$postgres_password
 JWT_SECRET=$jwt_secret
 SEED_CEO_PIN=$ceo_pin
@@ -84,11 +113,13 @@ SEED_EMPLOYEE_PIN=$employee_pin
 OTP_WEBHOOK_URL=
 OTP_WEBHOOK_TOKEN=
 BACKUP_REMOTE=
+DOMAIN=$DOMAIN
+ACME_EMAIL=$ACME_EMAIL
 EOF
   chmod 600 .env
 
   cat > .installation-credentials <<EOF
-URL=http://$(hostname -I 2>/dev/null | awk '{print $1}'):$APP_PORT
+URL=$install_url
 CEO username=CEO
 CEO initial password=$ceo_pin
 Created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -96,7 +127,37 @@ EOF
   chmod 600 .installation-credentials
 fi
 
-docker compose up -d --build
+if [ -n "$DOMAIN" ]; then
+  set_env_value APP_BIND 127.0.0.1
+  set_env_value DOMAIN "$DOMAIN"
+  set_env_value ACME_EMAIL "$ACME_EMAIL"
+  if [ -f .installation-credentials ]; then
+    sed -i "s|^URL=.*|URL=https://$DOMAIN|" .installation-credentials
+  fi
+
+  resolved_ip="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  public_ip="$(curl -4fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)"
+  if [ -z "$resolved_ip" ]; then
+    echo "Cảnh báo: DNS của $DOMAIN chưa phân giải. Hãy kiểm tra bản ghi A." >&2
+  elif [ -n "$public_ip" ] && [ "$resolved_ip" != "$public_ip" ]; then
+    echo "Cảnh báo: DNS trả về $resolved_ip, còn IP công khai VPS là $public_ip. Có thể hợp lệ nếu dùng Cloudflare proxy." >&2
+  fi
+
+  if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-service=http
+    firewall-cmd --permanent --add-service=https
+    firewall-cmd --reload
+  fi
+
+  docker compose -f docker-compose.yml -f docker-compose.domain.yml up -d --build
+else
+  set_env_value APP_BIND 0.0.0.0
+  docker compose up -d --build
+fi
 
 attempt=0
 until curl -fsS "http://127.0.0.1:$APP_PORT/api/health" >/dev/null 2>&1; do
@@ -115,7 +176,21 @@ fi
 
 ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
-echo "Cài đặt hoàn tất: http://${ip:-127.0.0.1}:$APP_PORT"
+if [ -n "$DOMAIN" ]; then
+  https_attempt=0
+  until curl -fsS --max-time 15 "https://$DOMAIN/api/health" >/dev/null 2>&1; do
+    https_attempt=$((https_attempt + 1))
+    if [ "$https_attempt" -ge 60 ]; then
+      docker compose -f docker-compose.yml -f docker-compose.domain.yml logs --tail 100 caddy
+      echo "Ứng dụng nội bộ đã chạy nhưng HTTPS chưa sẵn sàng. Kiểm tra DNS và firewall cổng 80/443." >&2
+      exit 1
+    fi
+    sleep 3
+  done
+  echo "Cài đặt hoàn tất: https://$DOMAIN"
+else
+  echo "Cài đặt hoàn tất: http://${ip:-127.0.0.1}:$APP_PORT"
+fi
 echo "Thông tin đăng nhập ban đầu: $APP_DIR/.installation-credentials"
 echo "Đổi mật khẩu CEO ngay sau lần đăng nhập đầu tiên."
 echo "Để backup ra ngoài VPS, cấu hình BACKUP_REMOTE trong .env và rclone."

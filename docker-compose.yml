@@ -34,7 +34,7 @@ services:
       OTP_WEBHOOK_URL: ${OTP_WEBHOOK_URL:-}
       OTP_WEBHOOK_TOKEN: ${OTP_WEBHOOK_TOKEN:-}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s

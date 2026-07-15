@@ -1,5 +1,5 @@
 param(
-  [string]$Output = "release/Quan-Tri-Doanh-Nghiep-VPS-1.1.1.zip"
+  [string]$Output = "release/Quan-Tri-Doanh-Nghiep-VPS-Domain-1.1.2.zip"
 )
 
 $ErrorActionPreference = "Stop"
