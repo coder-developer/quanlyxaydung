@@ -63,7 +63,7 @@ export const dbTables: DbTable[] = [
       { name: 'phone', type: 'VARCHAR(20)', constraints: ['NOT NULL', 'UNIQUE'], description: 'Số điện thoại liên hệ (dùng để đăng nhập app).' },
       { name: 'base_salary', type: 'NUMERIC(15, 2)', constraints: ['NOT NULL'], description: 'Mức lương cơ bản (Theo tháng với cơ hữu, Theo ngày công với thời vụ).' },
       { name: 'active', type: 'BOOLEAN', constraints: ['DEFAULT TRUE'], description: 'Trạng thái đang làm việc hay đã nghỉ.' },
-      { name: 'face_embedding', type: 'VECTOR(512)', constraints: [], description: 'Vector nhận diện khuôn mặt phục vụ chấm công chống gian lận.' }
+      { name: 'attendance_photo', type: 'TEXT', constraints: [], description: 'Ảnh bằng chứng chấm công khi nhân viên đã đồng ý; không phải dữ liệu nhận diện khuôn mặt.' }
     ]
   },
   {
@@ -74,10 +74,12 @@ export const dbTables: DbTable[] = [
     columns: [
       { name: 'id', type: 'UUID', constraints: ['PRIMARY KEY', 'DEFAULT gen_random_uuid()'], description: 'Mã nhà thầu / nhà cung cấp.' },
       { name: 'name', type: 'VARCHAR(255)', constraints: ['NOT NULL'], description: 'Tên pháp nhân công ty hoặc tên đội trưởng đội thầu.' },
-      { name: 'type', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (type IN (\'Subcontractor\', \'Supplier\'))'], description: 'Phân loại đối tác: Subcontractor (Nhà thầu phụ) hoặc Supplier (Nhà cung cấp vật tư).' },
+      { name: 'type', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (type IN (\'Subcontractor\', \'Supplier\', \'Client\'))'], description: 'Phân loại đối tác: Subcontractor (Nhà thầu phụ), Supplier (Nhà cung cấp vật tư) hoặc Client (Chủ đầu tư).' },
       { name: 'contact_person', type: 'VARCHAR(100)', description: 'Người đại diện liên hệ.' },
       { name: 'phone', type: 'VARCHAR(20)', description: 'Số điện thoại liên hệ.' },
       { name: 'email', type: 'VARCHAR(100)', description: 'Địa chỉ email gửi hóa đơn/đơn hàng.' },
+      { name: 'tax_code', type: 'VARCHAR(20)', description: 'Mã số thuế của pháp nhân đối tác.' },
+      { name: 'office_address', type: 'VARCHAR(500)', description: 'Địa chỉ trụ sở hoặc văn phòng giao dịch của đối tác.' },
       { name: 'rating', type: 'DECIMAL(2, 1)', constraints: ['DEFAULT 5.0'], description: 'Đánh giá năng lực đối tác (1.0 đến 5.0).' }
     ]
   },
@@ -159,7 +161,7 @@ export const dbTables: DbTable[] = [
       { name: 'latitude', type: 'DECIMAL(10, 8)', constraints: ['NOT NULL'], description: 'Vĩ độ GPS thiết bị di động lúc chấm công.' },
       { name: 'longitude', type: 'DECIMAL(11, 8)', constraints: ['NOT NULL'], description: 'Kinh độ GPS thiết bị di động lúc chấm công.' },
       { name: 'gps_status', type: 'VARCHAR(50)', constraints: ['NOT NULL', 'CHECK (gps_status IN (\'In-Range\', \'Out-Of-Range\'))'], description: 'Trạng thái định vị: In-Range (Nằm trong bán kính 200m của dự án) hoặc Out-Of-Range (Ngoài bán kính).' },
-      { name: 'verified_by_face', type: 'BOOLEAN', constraints: ['DEFAULT FALSE'], description: 'Xác thực khớp khuôn mặt qua AI camera chống chấm công hộ (True/False).' }
+      { name: 'photo_provided', type: 'BOOLEAN', constraints: ['DEFAULT FALSE'], description: 'Có ảnh bằng chứng chấm công để quản lý đối chiếu thủ công.' }
     ]
   },
   {
@@ -324,12 +326,11 @@ export const dbRelationships: DbRelation[] = [
 export function generatePostgreSqlDdl(): string {
   let ddl = `-- =========================================================================\n`;
   ddl += `-- POSTGRESQL / CLOUD SQL DDL FOR TOTAL CONSTRUCTION ERP SYSTEM\n`;
-  ddl += `-- Thiết kế bởi Giám đốc Công nghệ & Kiến trúc sư Hệ thống (CTO & Arch)\n`;
+  ddl += `-- Lược đồ dữ liệu Quản trị doanh nghiệp\n`;
   ddl += `-- Đơn vị tiền tệ hạch toán: VND | Chuẩn định dạng: UUID & Foreign Key cascade\n`;
   ddl += `-- =========================================================================\n\n`;
 
   ddl += `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";\n`;
-  ddl += `CREATE EXTENSION IF NOT EXISTS "vector"; -- Phục vụ chấm công đối khớp khuôn mặt bằng AI\n\n`;
 
   // Write tables in order of dependency
   const sortedTables = [
@@ -352,7 +353,7 @@ export function generatePostgreSqlDdl(): string {
 
     ddl += `-- ${table.description}\n`;
     ddl += `CREATE TABLE ${table.name} (\n`;
-    
+
     const colLines = table.columns.map(col => {
       const constraintsStr = col.constraints && col.constraints.length > 0 ? ` ${col.constraints.join(' ')}` : '';
       return `    ${col.name.padEnd(25)} ${col.type}${constraintsStr} -- ${col.description}`;

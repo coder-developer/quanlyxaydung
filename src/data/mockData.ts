@@ -244,7 +244,7 @@ export const initialEmployees: Employee[] = [
   { id: 'emp-3', name: 'Lê Hồng Sơn', role: 'Chỉ huy trưởng', type: 'Internal', projectId: 'proj-3', phone: '0903.555.666', baseSalary: 48000000, active: true, citizenId: '048092004811', permanentAddress: '78 Lê Lợi, Hải Châu 1, Hải Châu, Đà Nẵng' },
   { id: 'emp-4', name: 'Phạm Minh Hải', role: 'Chỉ huy trưởng', type: 'Internal', projectId: 'proj-4', phone: '0903.777.888', baseSalary: 50000000, active: true, citizenId: '001090003844', permanentAddress: '102 Phan Đình Phùng, Quán Thánh, Ba Đình, Hà Nội' },
   { id: 'emp-5', name: 'Vũ Đức Thành', role: 'Chỉ huy trưởng', type: 'Internal', projectId: 'proj-5', phone: '0903.999.000', baseSalary: 45000000, active: true, citizenId: '079095001299', permanentAddress: '42 Trần Hưng Đạo, Hiệp Phú, Quận 9, TP.HCM' },
-  
+
   // --- Site Engineers & Supervisors (Kỹ sư giám sát / Kế toán công trường) ---
   { id: 'emp-6', name: 'Hoàng Văn Tú', role: 'Kỹ sư giám sát', type: 'Internal', projectId: 'proj-1', phone: '0912.001.002', baseSalary: 25000000, active: true },
   { id: 'emp-7', name: 'Phạm Thanh Bình', role: 'Kỹ sư giám sát', type: 'Internal', projectId: 'proj-1', phone: '0912.001.003', baseSalary: 22000000, active: true },
@@ -252,7 +252,7 @@ export const initialEmployees: Employee[] = [
   { id: 'emp-9', name: 'Nguyễn Minh Quân', role: 'Kỹ sư giám sát', type: 'Internal', projectId: 'proj-3', phone: '0912.003.001', baseSalary: 26000000, active: true },
   { id: 'emp-10', name: 'Đặng Quốc Huy', role: 'Kỹ sư giám sát', type: 'Internal', projectId: 'proj-4', phone: '0912.004.001', baseSalary: 28000000, active: true },
   { id: 'emp-11', name: 'Vũ Văn Hùng', role: 'Kỹ sư giám sát', type: 'Internal', projectId: 'proj-5', phone: '0912.005.001', baseSalary: 25000000, active: true },
-  
+
   { id: 'emp-12', name: 'Mai Thị Xuân', role: 'Kế toán công trường', type: 'Internal', projectId: 'proj-1', phone: '0989.123.001', baseSalary: 18000000, active: true },
   { id: 'emp-13', name: 'Bùi Thị Hà', role: 'Kế toán công trường', type: 'Internal', projectId: 'proj-2', phone: '0989.123.002', baseSalary: 18000000, active: true },
   { id: 'emp-14', name: 'Nguyễn Thúy Vy', role: 'Kế toán công trường', type: 'Internal', projectId: 'proj-3', phone: '0989.123.003', baseSalary: 19000000, active: true },
@@ -351,7 +351,7 @@ export const initialTimesheets: Timesheet[] = [
   { id: 'time-2', employeeId: 'emp-18', projectId: 'proj-1', date: '2026-07-08', checkInTime: '07:05:00', checkOutTime: null, status: 'Late', latitude: 10.7410, longitude: 106.6344, gpsStatus: 'In-Range', verifiedByFace: true },
   { id: 'time-3', employeeId: 'emp-19', projectId: 'proj-1', date: '2026-07-08', checkInTime: '06:48:00', checkOutTime: null, status: 'Present', latitude: 10.7445, longitude: 106.6398, gpsStatus: 'Out-Of-Range', verifiedByFace: false }, // Worker checks in from coffee shop! Out-of-Range warning!
   { id: 'time-4', employeeId: 'emp-20', projectId: 'proj-1', date: '2026-07-08', checkInTime: '06:58:00', checkOutTime: null, status: 'Present', latitude: 10.7412, longitude: 106.6345, gpsStatus: 'In-Range', verifiedByFace: true },
-  
+
   // proj-2 (Cầu vượt TSN center: lat=10.8142, lng=106.6625)
   { id: 'time-5', employeeId: 'emp-24', projectId: 'proj-2', date: '2026-07-08', checkInTime: '06:50:00', checkOutTime: null, status: 'Present', latitude: 10.8143, longitude: 106.6626, gpsStatus: 'In-Range', verifiedByFace: true },
   { id: 'time-6', employeeId: 'emp-25', projectId: 'proj-2', date: '2026-07-08', checkInTime: '06:52:00', checkOutTime: null, status: 'Present', latitude: 10.8141, longitude: 106.6624, gpsStatus: 'In-Range', verifiedByFace: true },
@@ -451,7 +451,7 @@ export const initialFinancialTransactions: FinancialTransaction[] = [
   { id: 'tx-23', projectId: 'proj-4', type: 'Expense', category: 'Equipment', amount: 22000000000, description: 'Chi phí máy móc cơ giới san gạt, lu nền, tiêu hao xăng dầu lu nền', date: '2026-02-28' },
   { id: 'tx-24', projectId: 'proj-4', type: 'Expense', category: 'Material', amount: 14000000000, description: 'Mua cát san lấp đợt 1 và cống hộp đúc sẵn lắp đặt hạ tầng', date: '2026-03-01' },
   { id: 'tx-25', projectId: 'proj-4', type: 'Expense', category: 'Labor', amount: 10000000000, description: 'Chi trả lương kỹ sư cầu đường, lái xe ben, đội san lấp Biên Hòa', date: '2026-04-30' },
-  { id: 'tx-26', projectId: 'proj-4', type: 'Expense', category: 'Overhead', amount: 5000000000, description: 'Chi phí lán trại dã chiến, đền bù hoa màu, bảo vệ công trường diện rộng', date: '2026-02-15' },
+  { id: 'tx-26', projectId: 'proj-4', type: 'Expense', category: 'Overhead', amount: 5000000000, description: 'Chi phí lán trại , đền bù hoa màu, bảo vệ công trường diện rộng', date: '2026-02-15' },
 
   // --- VinaSemi (spent = 112.5 tỷ, revenue = 110 tỷ) ---
   { id: 'tx-27', projectId: 'proj-5', type: 'Revenue', category: 'Client_Billing', amount: 25000000000, description: 'Tập đoàn VinaSemi tạm ứng đợt khởi công xây nhà máy sạch', date: '2025-03-01', referenceId: 'ct-client-5' },

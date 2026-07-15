@@ -1,6 +1,0 @@
-{
-  "name": "Construction ERP Architect & Dashboard",
-  "description": "Hệ thống thiết kế kiến trúc cơ sở dữ liệu, luồng dữ liệu và bảng điều khiển mô phỏng ERP Xây dựng toàn diện cho 5 dự án, 50 nhân sự và 5 đối tác.",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

@@ -13,35 +13,31 @@ interface OpsSimulatorProps {
   approvals: ApprovalRequest[];
   equipment: Equipment[];
   timesheets: Timesheet[];
-  onCheckIn: (timesheet: Timesheet) => void;
-  onApproveLevel: (reqId: string, actor: string, note: string) => void;
-  onDispatchMachine: (eqId: string, projectId: string) => void;
-  onResetData: () => void;
   userRole?: UserRole;
 }
 
 export default function OpsSimulator({
   projects,
   employees,
-  approvals,
-  equipment,
-  timesheets,
-  onCheckIn,
-  onApproveLevel,
-  onDispatchMachine,
-  onResetData,
+  approvals: initialApprovals,
+  equipment: initialEquipment,
+  timesheets: initialTimesheets,
   userRole
 }: OpsSimulatorProps) {
 
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>(() => structuredClone(initialApprovals));
+  const [equipment, setEquipment] = useState<Equipment[]>(() => structuredClone(initialEquipment));
+  const [timesheets, setTimesheets] = useState<Timesheet[]>(() => structuredClone(initialTimesheets));
+
   // --- Timesheet Check-In Simulator State ---
-  const [selectedEmpId, setSelectedEmpId] = useState<string>('emp-18'); // Worker Trần Văn Bình
+  const [selectedEmpId, setSelectedEmpId] = useState<string>(employees[0]?.id || '');
   const [gpsSetting, setGpsSetting] = useState<'valid' | 'invalid'>('valid');
   const [faceCheck, setFaceCheck] = useState<boolean>(true);
   const [checkInLog, setCheckInLog] = useState<string>('');
 
   // --- Equipment Dispatch State ---
-  const [selectedEqId, setSelectedEqId] = useState<string>('eq-1');
-  const [targetProjId, setTargetProjId] = useState<string>('proj-2');
+  const [selectedEqId, setSelectedEqId] = useState<string>(initialEquipment[0]?.id || '');
+  const [targetProjId, setTargetProjId] = useState<string>(projects[0]?.id || '');
   const [dispatchLog, setDispatchLog] = useState<string>('');
 
   // --- Approval Workflow States ---
@@ -59,7 +55,7 @@ export default function OpsSimulator({
     // Project Center coordinates +/- small offset vs random coffee shop
     const lat = gpsSetting === 'valid' ? 10.7412 + (Math.random() - 0.5) * 0.0002 : 10.7985;
     const lng = gpsSetting === 'valid' ? 106.6345 + (Math.random() - 0.5) * 0.0002 : 106.6912;
-    
+
     const isLate = new Date().getHours() >= 8;
 
     const newTimesheet: Timesheet = {
@@ -76,14 +72,14 @@ export default function OpsSimulator({
       verifiedByFace: faceCheck
     };
 
-    onCheckIn(newTimesheet);
-    
+    setTimesheets(rows => [newTimesheet, ...rows]);
+
     if (gpsSetting === 'valid' && faceCheck) {
-      setCheckInLog(`✅ [CHẤM CÔNG THÀNH CÔNG] Công nhân ${currentEmp.name} đã check-in thành công tại dự án "${assignedProj.name}". Tọa độ hợp lệ, khớp khuôn mặt 98%!`);
+      setCheckInLog(`✅ [CHẤM CÔNG THÀNH CÔNG] Công nhân ${currentEmp.name} đã check-in thành công tại dự án "${assignedProj.name}". Tọa độ hợp lệ và đã có ảnh xác minh.`);
     } else if (gpsSetting === 'invalid') {
       setCheckInLog(`⚠️ [CẢNH BÁO GEOLOCATION] Phát hiện công nhân ${currentEmp.name} chấm công ngoài phạm vi cho phép của dự án (Cách dự án 4.2 km). Log chấm công được gắn cờ Out-of-Range!`);
     } else {
-      setCheckInLog(`❌ [LỖI XÁC THỰC] Chấm công bị gắn cờ cảnh báo do không vượt qua bước nhận diện AI khuôn mặt (FaceID không khớp).`);
+      setCheckInLog(`❌ [LỖI XÁC THỰC] Chấm công bị gắn cờ vì chưa có ảnh xác minh.`);
     }
   };
 
@@ -98,13 +94,26 @@ export default function OpsSimulator({
       return;
     }
 
-    onDispatchMachine(selectedEqId, targetProjId);
-    setDispatchLog(`🚛 [ĐIỀU ĐỘNG THÀNH CÔNG] Đã luân chuyển máy "${machine.name}" sang dự án "${targetProj.name}". Hệ thống tự động cập nhật nhật ký thiết bị và phân bổ định mức xăng dầu dã chiến.`);
+    setEquipment(rows => rows.map(item => item.id === selectedEqId ? { ...item, currentProjectId: targetProjId, status: 'In-Use' } : item));
+    setDispatchLog(`🚛 [ĐIỀU ĐỘNG THÀNH CÔNG] Đã luân chuyển máy "${machine.name}" sang dự án "${targetProj.name}". Hệ thống tự động cập nhật nhật ký thiết bị và phân bổ định mức xăng dầu .`);
+  };
+
+  const handleSandboxApproval = (reqId: string, actor: string, note: string, reject = false) => {
+    setApprovals(rows => rows.map(req => {
+      if (req.id !== reqId) return req;
+      const nextLevel = reject ? 4 : Math.min(4, req.currentLevel + 1) as 1 | 2 | 3 | 4;
+      return {
+        ...req,
+        currentLevel: nextLevel,
+        status: reject ? 'Rejected' : nextLevel === 4 ? 'Approved' : nextLevel === 3 ? 'Pending_Director' : 'Pending_Accountant',
+        timeline: [...req.timeline, { level: req.currentLevel, actor, action: reject ? 'Reject' : 'Approve', date: new Date().toISOString(), note }],
+      };
+    }));
   };
 
   return (
     <div className="space-y-6" id="ops-simulator-root">
-      
+
       {/* Simulation Control Header */}
       <div className="bg-emerald-950 text-white rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -112,15 +121,20 @@ export default function OpsSimulator({
             🏗️ Trình Mô Phỏng Nghiệp Vụ Công Trường (Interactive Sandbox)
           </h2>
           <p className="text-xs text-emerald-200 mt-1">
-            Chọn và chạy các kịch bản thực tế để quan sát sự thay đổi dữ liệu đồng bộ trên Executive Dashboard và Hệ thống cơ sở dữ liệu.
+            Mọi thao tác chỉ chạy trong bộ nhớ sandbox của trình duyệt và không ghi vào cơ sở dữ liệu thật.
           </p>
         </div>
         <button
-          onClick={onResetData}
+          onClick={() => {
+            setApprovals(structuredClone(initialApprovals));
+            setEquipment(structuredClone(initialEquipment));
+            setTimesheets(structuredClone(initialTimesheets));
+            setCheckInLog(''); setDispatchLog('');
+          }}
           className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition self-start md:self-auto shadow-2xs"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          Khôi phục dữ liệu gốc
+          Đặt lại sandbox
         </button>
       </div>
 
@@ -130,7 +144,7 @@ export default function OpsSimulator({
         <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4 shadow-3xs">
           <div className="flex items-center gap-2 text-emerald-700">
             <MapPin className="w-5 h-5 shrink-0" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">1. Mô phỏng Chấm công GPS di động dã chiến</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900">1. Mô phỏng Chấm công GPS di động </h3>
           </div>
           <p className="text-xs text-gray-500 leading-normal">
             Công nhân tại 5 công trường khác nhau sử dụng app điện thoại quét mã QR dán tại lán trại. Hệ thống so khớp GPS và AI camera.
@@ -185,7 +199,7 @@ export default function OpsSimulator({
               </div>
             </div>
 
-            {/* AI Face check option */}
+            {/* Attendance photo option */}
             <div className="flex items-center gap-2 py-1">
               <input
                 type="checkbox"
@@ -195,7 +209,7 @@ export default function OpsSimulator({
                 className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
               <label htmlFor="faceCheckCheckbox" className="font-semibold text-gray-700 select-none cursor-pointer">
-                Xác thực khớp khuôn mặt qua AI Face ID (Anti-Fraud)
+                Ghi nhận ảnh xác minh chấm công
               </label>
             </div>
 
@@ -211,8 +225,8 @@ export default function OpsSimulator({
           {/* Action Log Result */}
           {checkInLog && (
             <div className={`p-3.5 rounded-lg border text-xs leading-relaxed font-mono ${
-              checkInLog.includes('thành công') 
-                ? 'bg-emerald-50 border-emerald-100 text-emerald-900' 
+              checkInLog.includes('thành công')
+                ? 'bg-emerald-50 border-emerald-100 text-emerald-900'
                 : 'bg-rose-50 border-rose-100 text-rose-900'
             }`}>
               {checkInLog}
@@ -297,12 +311,12 @@ export default function OpsSimulator({
           {approvals.map((req) => {
             const requester = employees.find(e => e.id === req.requesterId);
             const proj = projects.find(p => p.id === req.projectId);
-            
+
             const isCompleted = req.status === 'Approved' || req.status === 'Rejected';
 
             return (
               <div key={req.id} className="border border-gray-200 rounded-xl p-4 flex flex-col justify-between bg-gray-50/30 hover:border-gray-300 transition shadow-3xs">
-                
+
                 {/* Request details */}
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -311,14 +325,14 @@ export default function OpsSimulator({
                       req.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
                       req.status === 'Rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800 animate-pulse'
                     }`}>
-                      {req.status === 'Approved' ? 'Đã duyệt xong' : 
-                       req.status === 'Rejected' ? 'Từ chối' : 
+                      {req.status === 'Approved' ? 'Đã duyệt xong' :
+                       req.status === 'Rejected' ? 'Từ chối' :
                        req.status === 'Pending_Accountant' ? 'Kế toán chờ duyệt' : 'Giám đốc chờ duyệt'}
                     </span>
                   </div>
 
                   <h4 className="text-xs font-bold text-gray-900 leading-snug">{req.title}</h4>
-                  
+
                   <div className="text-[10px] text-gray-500 space-y-1">
                     <div>Đề xuất: <span className="font-semibold text-gray-800">{requester?.name}</span> ({requester?.role})</div>
                     <div>Giá trị: <span className="font-bold text-indigo-950 font-mono">{req.amount.toLocaleString()} ₫</span></div>
@@ -369,7 +383,7 @@ export default function OpsSimulator({
                         <button
                           onClick={() => {
                             const actorName = req.currentLevel === 2 ? 'Mai Thị Xuân (Kế toán)' : 'Giám đốc Điều hành';
-                            onApproveLevel(req.id, actorName, approvalNotes);
+                            handleSandboxApproval(req.id, actorName, approvalNotes);
                             setApprovalNotes('Đồng ý duyệt cấp tiếp theo.');
                           }}
                           className="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded flex items-center justify-center gap-1 shadow-3xs"
@@ -380,7 +394,7 @@ export default function OpsSimulator({
                         <button
                           onClick={() => {
                             // Reject logic simulated simply
-                            onApproveLevel(req.id, 'Ban Lãnh Đạo', 'Từ chối duyệt: Vượt định mức vật tư tối đa.');
+                            handleSandboxApproval(req.id, 'Ban Lãnh Đạo', 'Từ chối duyệt: Vượt định mức vật tư tối đa.', true);
                           }}
                           className="py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded flex items-center justify-center gap-1 shadow-3xs"
                         >

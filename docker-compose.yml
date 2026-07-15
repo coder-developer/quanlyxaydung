@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: constructos
+      POSTGRES_USER: constructos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U constructos -d constructos"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgresql://constructos:${POSTGRES_PASSWORD}@postgres:5432/constructos
+      DATABASE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      SEED_CEO_PIN: ${SEED_CEO_PIN}
+      SEED_ACCOUNTANT_PIN: ${SEED_ACCOUNTANT_PIN}
+      SEED_SITE_MANAGER_PIN: ${SEED_SITE_MANAGER_PIN}
+      SEED_AUDITOR_PIN: ${SEED_AUDITOR_PIN}
+      SEED_EMPLOYEE_PIN: ${SEED_EMPLOYEE_PIN}
+      OTP_WEBHOOK_URL: ${OTP_WEBHOOK_URL:-}
+      OTP_WEBHOOK_TOKEN: ${OTP_WEBHOOK_TOKEN:-}
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

@@ -1,29 +1,22 @@
 import React, { useState, useRef } from 'react';
 import { CompanyConfig, UserRole } from '../types';
-import { 
-  Building2, Save, FileText, CheckCircle2, RefreshCw, 
-  Printer, AlertCircle, Database, Download, Upload, 
-  ShieldAlert, Trash2, ToggleLeft, ToggleRight, Laptop,
+import {
+  Building2, Save, FileText, CheckCircle2, RefreshCw,
+  Printer, AlertCircle, Database, Download, Upload,
+  Trash2, ToggleLeft, ToggleRight, Laptop,
   Cloud, Clock, Lock, Shield, Sliders, Check, Activity, AlertTriangle
 } from 'lucide-react';
 
 interface CompanyConfigViewProps {
   companyConfig: CompanyConfig;
   setCompanyConfig: React.Dispatch<React.SetStateAction<CompanyConfig>>;
-  
+
   autoSaveEnabled: boolean;
   setAutoSaveEnabled: (enabled: boolean) => void;
   onImportBackup: (backup: any) => string | null;
   onExportBackup: () => void;
   onResetData: () => void;
   userRole?: UserRole;
-
-  cloudSyncStatus?: 'idle' | 'syncing' | 'success' | 'error' | 'offline';
-  lastSyncedTime?: string;
-  cloudDbSyncEnabled?: boolean;
-  setCloudDbSyncEnabled?: (enabled: boolean) => void;
-  onPushToCloud?: () => Promise<string>;
-  onPullFromCloud?: () => Promise<string>;
 }
 
 export default function CompanyConfigView({
@@ -34,18 +27,12 @@ export default function CompanyConfigView({
   onImportBackup,
   onExportBackup,
   onResetData,
-  userRole,
-  cloudSyncStatus = 'idle',
-  lastSyncedTime = 'Chưa đồng bộ',
-  cloudDbSyncEnabled = false,
-  setCloudDbSyncEnabled,
-  onPushToCloud,
-  onPullFromCloud
+  userRole
 }: CompanyConfigViewProps) {
   // Local state to manage edits before saving
-  const [formConfig, setFormConfig] = useState<CompanyConfig>({ 
+  const [formConfig, setFormConfig] = useState<CompanyConfig>({
     ...companyConfig,
-    appTitle: companyConfig.appTitle || 'CONSTRUCT-OS'
+    appTitle: companyConfig.appTitle || 'Quản trị doanh nghiệp'
   });
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,17 +58,19 @@ export default function CompanyConfigView({
   const handleResetToDefault = () => {
     if (window.confirm('Bạn có chắc chắn muốn khôi phục thông tin doanh nghiệp về mặc định ban đầu không?')) {
       const defaults: CompanyConfig = {
-        companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-        siteOffice: 'BĐH Công trường dã chiến - Dự án cao tốc Bắc Nam',
-        directorName: 'Đỗ Minh Tuấn',
-        chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-        treasurerName: 'Lê Thị Thu',
-        technicianName: 'Trần Hải Nam',
+        companyName: 'Công Ty Cổ Phần Xây Dựng',
+        siteOffice: 'Tp Hồ Chí Minh',
+        taxCode: '',
+        officeAddress: 'Tp Hồ Chí Minh',
+        directorName: '',
+        chiefAccountantName: '',
+        treasurerName: '',
+        technicianName: '',
         journalTitle: 'SỔ NHẬT KÝ CHUNG',
-        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-        fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU DÃ CHIẾN',
-        maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-        appTitle: 'CONSTRUCT-OS',
+        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ',
+        fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU',
+        maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+        appTitle: 'Quản trị doanh nghiệp',
       };
       setFormConfig(defaults);
       setCompanyConfig(defaults);
@@ -94,23 +83,23 @@ export default function CompanyConfigView({
       showToast('Hành động khôi phục dữ liệu gốc hệ thống yêu cầu đặc quyền tối cao của Giám Đốc (CEO).', 'error');
       return;
     }
-    if (window.confirm('CẢNH BÁO: Thao tác này sẽ xóa toàn bộ dữ liệu hiện tại trong bộ nhớ trình duyệt và tải lại dữ liệu mô phỏng gốc. Bạn có chắc chắn muốn tiếp tục?')) {
-      onResetData();
-      setFormConfig({
-        companyName: 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT',
-        siteOffice: 'BĐH Công trường dã chiến - Dự án cao tốc Bắc Nam',
-        directorName: 'Đỗ Minh Tuấn',
-        chiefAccountantName: 'Nguyễn Thị Thanh Hà',
-        treasurerName: 'Lê Thị Thu',
-        technicianName: 'Trần Hải Nam',
+    onResetData();
+    setFormConfig({
+        companyName: 'Công Ty Cổ Phần Xây Dựng',
+        siteOffice: 'Tp Hồ Chí Minh',
+        taxCode: '',
+        officeAddress: 'Tp Hồ Chí Minh',
+        directorName: '',
+        chiefAccountantName: '',
+        treasurerName: '',
+        technicianName: '',
         journalTitle: 'SỔ NHẬT KÝ CHUNG',
-        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ CƠ GIỚI',
-        fuelTitle: 'PHIẾU CẤP PHÁT XĂNG DẦU - NHIÊN LIỆU DÃ CHIẾN',
-        maintenanceTitle: 'BIÊN BẢN NGHIỆM THU & BÀN GIAO SỬA CHỮA THIẾT BỊ',
-        appTitle: 'CONSTRUCT-OS',
-      });
-      showToast('Đã reset toàn bộ cơ sở dữ liệu ERP về mặc định gốc thành công!', 'success');
-    }
+        dispatchTitle: 'LỆNH ĐIỀU ĐỘNG THIẾT BỊ',
+        fuelTitle: 'PHIẾU CẤP PHÁT NHIÊN LIỆU',
+        maintenanceTitle: 'BIÊN BẢN BẢO TRÌ THIẾT BỊ',
+        appTitle: 'Quản trị doanh nghiệp',
+    });
+    showToast('Đã gửi yêu cầu reset hệ thống.', 'success');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,7 +117,7 @@ export default function CompanyConfigView({
           // Update local edit form state as well
           setFormConfig({
             ...json.companyConfig,
-            appTitle: json.companyConfig.appTitle || 'CONSTRUCT-OS'
+            appTitle: json.companyConfig.appTitle || 'Quản trị doanh nghiệp'
           });
           showToast('Đã đồng bộ và khôi phục toàn bộ cơ sở dữ liệu từ file backup thành công!', 'success');
         }
@@ -145,8 +134,8 @@ export default function CompanyConfigView({
       {/* Toast Alert */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 border px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-bounce ${
-          toastMessage.type === 'success' 
-            ? 'bg-slate-900 border-slate-800 text-white' 
+          toastMessage.type === 'success'
+            ? 'bg-slate-900 border-slate-800 text-white'
             : 'bg-rose-900 border-rose-800 text-white'
         }`}>
           {toastMessage.type === 'success' ? (
@@ -160,7 +149,7 @@ export default function CompanyConfigView({
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+
         {/* Left Side: Form Controls */}
         <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="bg-slate-900 text-white px-5 py-4 border-b border-slate-800 flex items-center justify-between">
@@ -171,7 +160,7 @@ export default function CompanyConfigView({
                 <p className="text-[10px] text-slate-400 mt-0.5">Tùy chỉnh thương hiệu, pháp nhân và cấu trúc tiêu đề mẫu in đồng bộ</p>
               </div>
             </div>
-            
+
             <button
               onClick={handleResetToDefault}
               className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-black uppercase bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors cursor-pointer"
@@ -199,7 +188,7 @@ export default function CompanyConfigView({
                     value={formConfig.appTitle}
                     onChange={(e) => handleChange('appTitle', e.target.value)}
                     className="w-full text-xs font-black px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-blue-700 uppercase"
-                    placeholder="Nhập tên hiển thị app (ví dụ: CONSTRUCT-OS)..."
+                    placeholder="Nhập tên hiển thị app..."
                     required
                   />
                   <p className="text-[9px] text-slate-400 mt-1 italic">Thay đổi này sẽ lập tức đổi chữ thương hiệu trên thanh Menu Sidebar dải trái.</p>
@@ -210,7 +199,7 @@ export default function CompanyConfigView({
             {/* Section 1: Thông tin pháp nhân */}
             <div>
               <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-1.5">
-                II. Thông tin Doanh nghiệp & Ban điều hành
+                II. Thông tin Doanh nghiệp
               </h3>
               <div className="grid grid-cols-1 gap-4">
                 <div>
@@ -226,9 +215,31 @@ export default function CompanyConfigView({
                     required
                   />
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Mã số thuế</label>
+                    <input
+                      type="text"
+                      value={formConfig.taxCode || ''}
+                      onChange={(e) => handleChange('taxCode', e.target.value.trimStart().toUpperCase())}
+                      className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      placeholder="Ví dụ: 0312345678"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Địa chỉ văn phòng</label>
+                    <input
+                      type="text"
+                      value={formConfig.officeAddress || ''}
+                      onChange={(e) => handleChange('officeAddress', e.target.value)}
+                      className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      placeholder="Nhập địa chỉ trụ sở/văn phòng..."
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Ban điều hành dã chiến / Văn phòng Công trường
+                    Ban điều hành / Văn phòng công trường
                   </label>
                   <input
                     type="text"
@@ -370,15 +381,15 @@ export default function CompanyConfigView({
                 <Shield className="w-4 h-4 text-slate-400" />
                 <span>V. Chính sách Quản trị Doanh nghiệp & Kiểm soát nội bộ</span>
               </h3>
-              
+
               <div className="space-y-4">
                 {/* Spending Limits Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <div className="col-span-1 md:col-span-2 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
                     <Sliders className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Hạn mức phê duyệt chi tiêu dã chiến</span>
+                    <span>Hạn mức phê duyệt chi tiêu </span>
                   </div>
-                  
+
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                       Hạn mức phê duyệt Chỉ huy trưởng (VND)
@@ -578,7 +589,7 @@ export default function CompanyConfigView({
                       </tbody>
                     </table>
                   </div>
-                  
+
                   <div className="bg-slate-50 px-4 py-2 flex gap-1.5 items-center text-[9px] text-slate-500 border-t border-slate-150">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                     <span>
@@ -605,14 +616,14 @@ export default function CompanyConfigView({
 
         {/* Right Side: Storage Configuration & Backup Panel */}
         <div className="lg:col-span-5 space-y-6">
-          
+
           {/* Storage Config Box */}
           <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-md p-6 text-white space-y-5">
             <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
               <Database className="w-5 h-5 text-emerald-400" />
               <div>
                 <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Cấu hình Lưu trữ Hệ thống</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Quản lý cơ chế lưu cơ sở dữ liệu dã chiến ERP</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Quản lý cơ chế lưu trữ dữ liệu ERP</p>
               </div>
             </div>
 
@@ -626,7 +637,7 @@ export default function CompanyConfigView({
                   Lưu trữ trực tiếp mọi thao tác dữ liệu (Nhân sự, Kho, Kế toán, Máy móc) vào trình duyệt của bạn để tránh mất mát.
                 </p>
               </div>
-              
+
               <button
                 type="button"
                 onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
@@ -652,7 +663,7 @@ export default function CompanyConfigView({
             {/* Backup & Restore Action Cluster */}
             <div className="space-y-3 pt-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">SAO LƯU & PHỤC HỒI DỰ PHÒNG</span>
-              
+
               {/* Export Button */}
               <button
                 type="button"
@@ -664,12 +675,12 @@ export default function CompanyConfigView({
               </button>
 
               {/* Import Button & File input */}
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                accept=".json" 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".json"
+                className="hidden"
               />
               <button
                 type="button"
@@ -683,20 +694,13 @@ export default function CompanyConfigView({
 
             {/* Wipe & Reset System Database */}
             <div className="pt-4 border-t border-slate-800 space-y-2">
-              <div className="flex gap-2 items-start text-slate-400 text-[10px] leading-relaxed">
-                <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Lưu ý bảo mật:</strong> Bản sao lưu được nén dưới định dạng JSON mã hóa ký tự UTF-8 chứa toàn bộ bảng liên kết và bút toán nội bộ. Cần bảo mật file này.
-                </span>
-              </div>
-
               <button
                 type="button"
                 onClick={handleFullResetDatabase}
                 disabled={userRole !== 'CEO'}
                 className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${
-                  userRole === 'CEO' 
-                    ? 'bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 cursor-pointer' 
+                  userRole === 'CEO'
+                    ? 'bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-200 cursor-pointer'
                     : 'bg-slate-950/65 text-slate-500 border border-slate-800 cursor-not-allowed opacity-60'
                 }`}
               >
@@ -706,122 +710,17 @@ export default function CompanyConfigView({
             </div>
           </div>
 
-          {/* Cloud Firestore Database Sync Box */}
+          {/* PostgreSQL is the single source of truth. Google Drive only stores documents. */}
           <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-md p-6 text-white space-y-5">
             <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-              <Cloud className="w-5 h-5 text-blue-400" />
+              <Database className="w-5 h-5 text-emerald-400" />
               <div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-blue-400">Đấu nối Cloud Database (Firestore)</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Đồng bộ và ghi dữ liệu ổn định khi triển khai lên Vercel</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Cơ sở dữ liệu PostgreSQL tập trung</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Nguồn dữ liệu nghiệp vụ duy nhất cho mọi tài khoản và thiết bị</p>
               </div>
             </div>
-
-            {/* Cloud Auto Save Toggle */}
-            <div className="bg-slate-950/60 p-4 rounded-lg border border-slate-800/80 flex items-center justify-between gap-4">
-              <div className="space-y-1">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider block text-slate-200">
-                  Tự động đồng bộ với Cloud
-                </span>
-                <p className="text-[9.5px] text-slate-400 leading-normal">
-                  Mọi chỉnh sửa dữ liệu sẽ được tự động đồng bộ ngầm lên Cloud Firestore (sau 5 giây dừng thao tác) để đảm bảo ổn định và an toàn.
-                </p>
-              </div>
-              
-              <button
-                type="button"
-                onClick={() => setCloudDbSyncEnabled && setCloudDbSyncEnabled(!cloudDbSyncEnabled)}
-                className="text-blue-400 hover:text-blue-300 transition-colors shrink-0 animate-fade-in"
-              >
-                {cloudDbSyncEnabled ? (
-                  <ToggleRight className="w-12 h-12 text-blue-500" />
-                ) : (
-                  <ToggleLeft className="w-12 h-12 text-slate-600" />
-                )}
-              </button>
-            </div>
-
-            {/* Connection Status and Last Synced */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[10px] font-mono bg-slate-950 px-3 py-2 rounded border border-slate-850">
-                <span className="text-slate-400">TRẠNG THÁI KẾT NỐI:</span>
-                <span className={`font-bold flex items-center gap-1 ${
-                  cloudSyncStatus === 'syncing' ? 'text-blue-400 animate-pulse' :
-                  cloudSyncStatus === 'success' ? 'text-emerald-400' :
-                  cloudSyncStatus === 'error' ? 'text-rose-400' :
-                  cloudSyncStatus === 'offline' ? 'text-amber-400' :
-                  'text-slate-400'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full bg-current ${cloudSyncStatus === 'syncing' ? 'animate-ping' : ''}`}></span>
-                  {cloudSyncStatus === 'syncing' ? 'ĐANG ĐỒNG BỘ...' :
-                   cloudSyncStatus === 'success' ? 'ĐÃ ĐỒNG BỘ THÀNH CÔNG' :
-                   cloudSyncStatus === 'error' ? 'LỖI KẾT NỐI' :
-                   cloudSyncStatus === 'offline' ? 'OFFLINE / KHÔNG ĐƯỜNG TRUYỀN' :
-                   'ONLINE - SẴN SÀNG'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] font-mono bg-slate-950 px-3 py-2 rounded border border-slate-850">
-                <span className="text-slate-400 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  ĐỒNG BỘ GẦN NHẤT:
-                </span>
-                <span className="font-bold text-slate-300">{lastSyncedTime}</span>
-              </div>
-            </div>
-
-            {/* Manual Sync Actions */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (onPushToCloud) {
-                    const res = await onPushToCloud();
-                    if (res === 'success') {
-                      showToast('Đã đẩy toàn bộ dữ liệu hiện tại lên Cloud Firestore!', 'success');
-                    } else if (res === 'offline') {
-                      showToast('Lỗi: Không tìm thấy kết nối mạng hoặc Firestore bị chặn.', 'error');
-                    } else {
-                      showToast('Đồng bộ lên Cloud thất bại. Vui lòng kiểm tra lại.', 'error');
-                    }
-                  }
-                }}
-                disabled={cloudSyncStatus === 'syncing'}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold uppercase transition-all shadow disabled:opacity-50 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Đẩy lên Cloud</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  if (window.confirm('CẢNH BÁO: Hành động này sẽ tải toàn bộ dữ liệu từ Cloud Firestore về máy và GHI ĐÈ dữ liệu hiện tại trên trình duyệt. Bạn có chắc chắn muốn tiếp tục?')) {
-                    if (onPullFromCloud) {
-                      const res = await onPullFromCloud();
-                      if (res === 'success') {
-                        showToast('Đã tải và cập nhật toàn bộ dữ liệu từ Cloud Firestore thành công!', 'success');
-                      } else if (res === 'offline') {
-                        showToast('Lỗi: Thiết bị ngoại tuyến hoặc bị chặn kết nối.', 'error');
-                      } else {
-                        showToast('Tải dữ liệu thất bại. Cơ sở dữ liệu Cloud có thể đang trống.', 'error');
-                      }
-                    }
-                  }
-                }}
-                disabled={cloudSyncStatus === 'syncing'}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-bold uppercase border border-slate-700 transition-all disabled:opacity-50 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Tải từ Cloud</span>
-              </button>
-            </div>
-
-            {/* Security Warning */}
-            <div className="pt-3 border-t border-slate-800 flex gap-2 items-start text-slate-400 text-[10px] leading-relaxed">
-              <Lock className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-              <span>
-                <strong>Bảo mật & Ổn định:</strong> Kết nối trực tiếp được bảo vệ bằng Firebase Security Rules. Thích hợp chạy ổn định lâu dài khi deploy lên môi trường Serverless của Vercel mà không bị mất mát dữ liệu.
-              </span>
+            <div className="bg-slate-950/60 p-4 rounded-lg border border-slate-800/80 text-[10px] leading-relaxed text-slate-300">
+              Dữ liệu thay đổi được kiểm soát phiên bản, ghi audit log và đồng bộ qua API máy chủ. Google Drive chỉ dùng lưu tệp tài liệu, không ghi dữ liệu ERP.
             </div>
           </div>
 
@@ -836,7 +735,8 @@ export default function CompanyConfigView({
               <div className="flex justify-between items-start border-b border-dashed border-slate-100 pb-2">
                 <div className="space-y-0.5">
                   <div className="font-bold text-[9px] uppercase text-slate-900 leading-tight">{formConfig.companyName}</div>
-                  <div className="text-slate-500 font-sans text-[8px]">{formConfig.siteOffice}</div>
+                  <div className="text-slate-500 font-sans text-[8px]">{formConfig.officeAddress || formConfig.siteOffice}</div>
+                  {formConfig.taxCode && <div className="text-slate-500 font-sans text-[8px]">MST: {formConfig.taxCode}</div>}
                 </div>
                 <div className="text-right text-[8px] font-sans">
                   <span className="font-bold text-slate-900">Mẫu số S03a-DN</span><br/>

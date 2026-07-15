@@ -5,6 +5,7 @@
 
 export interface Project {
   id: string;
+  code?: string;
   name: string;
   location: string;
   budget: number; // in VND
@@ -14,6 +15,9 @@ export interface Project {
   startDate: string;
   endDate: string;
   status: 'Planning' | 'Active' | 'Delayed' | 'Completed';
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number;
 }
 
 export interface Employee {
@@ -32,11 +36,14 @@ export interface Employee {
 
 export interface Contractor {
   id: string;
+  code?: string;
   name: string;
-  type: 'Subcontractor' | 'Supplier';
+  type: 'Subcontractor' | 'Supplier' | 'Client';
   contactPerson: string;
   phone: string;
   email: string;
+  taxCode?: string;
+  officeAddress?: string;
   rating: number;
 }
 
@@ -98,6 +105,7 @@ export interface Timesheet {
   longitude: number;
   gpsStatus: 'In-Range' | 'Out-Of-Range'; // Compare with project GPS
   verifiedByFace: boolean;
+  attendancePhoto?: string;
 }
 
 export interface ApprovalRequest {
@@ -175,6 +183,8 @@ export interface ConstructionTask {
 export interface CompanyConfig {
   companyName: string;
   siteOffice: string;
+  taxCode?: string;
+  officeAddress?: string;
   directorName: string;
   chiefAccountantName: string;
   treasurerName: string;
@@ -194,7 +204,4 @@ export interface CompanyConfig {
   requireDoubleApproval?: boolean;
 }
 
-export type UserRole = 'CEO' | 'Accountant' | 'SiteManager' | 'Auditor';
-
-
-
+export type UserRole = 'CEO' | 'ChiefAccountant' | 'SiteAccountant' | 'SiteManager' | 'Auditor' | 'Employee';

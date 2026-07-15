@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  KeyRound, 
-  HardHat, 
-  AlertCircle, 
-  Eye, 
-  EyeOff, 
-  Users, 
-  ArrowRight, 
-  UserPlus, 
-  LogIn, 
+import {
+  ShieldCheck,
+  KeyRound,
+  HardHat,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Users,
+  ArrowRight,
+  UserPlus,
+  LogIn,
   ArrowLeft,
-  CheckCircle2
+  CheckCircle2,
+  UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
+import { apiChangePin, apiLogin, apiRegister, apiVerifyRegistrationOtp, type ApiUser } from '../lib/api';
 
 interface LoginScreenProps {
-  onLoginSuccess: (role: UserRole, fullName?: string) => void;
+  onLoginSuccess: (role: UserRole, fullName?: string, employeeId?: string) => void;
   appTitle?: string;
   companyName?: string;
 }
@@ -29,25 +31,32 @@ interface RegisteredUser {
   createdAt: string;
 }
 
-export default function LoginScreen({ 
-  onLoginSuccess, 
-  appTitle = 'CONSTRUCT-OS', 
-  companyName = 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT' 
+export default function LoginScreen({
+  onLoginSuccess,
+  appTitle = 'Quản trị doanh nghiệp',
+  companyName = 'Công Ty Cổ Phần Xây Dựng'
 }: LoginScreenProps) {
-  
+  const serverMode = import.meta.env.VITE_USE_SERVER === 'true';
+
   // App modes: 'login' or 'register'
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
-  
+
   // Login types: 'default' (by default roles) or 'personal' (by registered users)
   const [loginType, setLoginType] = useState<'default' | 'personal'>('default');
 
   // Login states
   const [selectedRole, setSelectedRole] = useState<UserRole>('CEO');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [employeeUsername, setEmployeeUsername] = useState('');
   const [selectedUsername, setSelectedUsername] = useState<string>('');
   const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pendingPasswordUser, setPendingPasswordUser] = useState<ApiUser | null>(null);
+  const [currentDefaultPassword, setCurrentDefaultPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   // Registration states
   const [regUsername, setRegUsername] = useState('');
@@ -55,7 +64,12 @@ export default function LoginScreen({
   const [regRole, setRegRole] = useState<UserRole>('CEO');
   const [regPin, setRegPin] = useState('');
   const [regConfirmPin, setRegConfirmPin] = useState('');
+  const [regEmployeeCode, setRegEmployeeCode] = useState('');
+  const [regPhone, setRegPhone] = useState('');
   const [showRegPin, setShowRegPin] = useState(false);
+  const [registrationRequestId, setRegistrationRequestId] = useState('');
+  const [registrationOtp, setRegistrationOtp] = useState('');
+  const [otpPreview, setOtpPreview] = useState('');
 
   // List of registered users
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
@@ -86,42 +100,103 @@ export default function LoginScreen({
       color: 'border-l-blue-500 text-blue-600',
       badge: 'Toàn quyền Hệ thống'
     },
-    Accountant: {
+    ChiefAccountant: {
       name: 'Kế Toán Trưởng',
-      desc: 'Kiểm soát sổ sách kế toán, dòng tiền lương, công nợ & nhân sự',
+      desc: 'Duyệt chi, kiểm soát sổ sách và xem báo cáo tổng hợp',
       correctPin: '2222',
       icon: Users,
       color: 'border-l-indigo-500 text-indigo-600',
-      badge: 'Tài chính & Nhân sự'
+      badge: 'Kiểm soát Tài chính'
+    },
+    SiteAccountant: {
+      name: 'Kế Toán Công Trường',
+      desc: 'Nhập liệu và đề xuất chi cho dự án được phân công',
+      correctPin: '5555',
+      icon: Users,
+      color: 'border-l-violet-500 text-violet-600',
+      badge: 'Tài chính Dự án'
     },
     SiteManager: {
       name: 'Chỉ Huy Trưởng',
-      desc: 'Quản lý kho bãi, cấp phát xăng dầu dã chiến & điều phối cơ giới',
+      desc: 'Quản lý kho bãi, cấp phát nhiên liệu và điều phối thiết bị',
       correctPin: '3333',
       icon: HardHat,
       color: 'border-l-emerald-500 text-emerald-600',
-      badge: 'Tác chiến Công trường'
+      badge: 'Điều hành Công trường'
     },
     Auditor: {
       name: 'Thanh Tra / Khách',
-      desc: 'Truy cập dã chiến chế độ chỉ xem báo cáo P&L dã ngoại',
+      desc: 'Truy cập chế độ chỉ xem báo cáo và dữ liệu kiểm toán',
       correctPin: '4444',
       icon: KeyRound,
       color: 'border-l-amber-500 text-amber-600',
       badge: 'Chỉ đọc (Read-Only)'
+    },
+    Employee: {
+      name: 'Nhân Viên',
+      desc: 'Chấm công, điểm danh và xem bảng lương cá nhân',
+      correctPin: '5555',
+      icon: UserCheck,
+      color: 'border-l-cyan-500 text-cyan-600',
+      badge: 'Cổng Nhân viên'
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    if (!serverMode) {
+      setErrorMsg('Chế độ đăng nhập cục bộ đã bị vô hiệu hóa để bảo đảm RBAC. Vui lòng kết nối backend máy chủ.');
+      return;
+    }
+
+    const username = loginUsername.trim().toLowerCase();
+    if (!username) {
+      setErrorMsg('Vui lòng nhập tên đăng nhập.');
+      return;
+    }
+    try {
+      const { user } = await apiLogin(username, pin);
+      if (user.mustChangePassword) {
+        setPendingPasswordUser(user);
+        setCurrentDefaultPassword(pin);
+        setPin('');
+        return;
+      }
+      onLoginSuccess(user.role, user.fullName, user.employeeId);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
+    }
+    return;
 
     if (loginType === 'default') {
       const config = roleConfig[selectedRole];
+      if (serverMode) {
+        const usernames: Partial<Record<UserRole, string>> = { CEO: 'ceo', ChiefAccountant: 'ketoan', Auditor: 'kiemtoan' };
+        const personalRole = selectedRole === 'Employee' || selectedRole === 'SiteManager' || selectedRole === 'SiteAccountant';
+        const username = personalRole ? employeeUsername.trim().toLowerCase() : usernames[selectedRole] || '';
+        if (!username) {
+          setErrorMsg('Vui lòng nhập tên đăng nhập nhân viên.');
+          return;
+        }
+        try {
+          const { user } = await apiLogin(username, pin);
+          if (user.mustChangePassword) {
+            setPendingPasswordUser(user);
+            setCurrentDefaultPassword(pin);
+            setPin('');
+            return;
+          }
+          onLoginSuccess(user.role, user.fullName, user.employeeId);
+        } catch (error) {
+          setErrorMsg(error instanceof Error ? error.message : 'Không thể kết nối máy chủ.');
+        }
+        return;
+      }
       if (pin === config.correctPin) {
         onLoginSuccess(selectedRole);
       } else {
-        setErrorMsg(`Mã khóa PIN không đúng cho vai trò ${config.name}. Vui lòng thử lại!`);
+        setErrorMsg(`Mật khẩu không đúng cho vai trò ${config.name}.`);
       }
     } else {
       // Personal login
@@ -140,15 +215,40 @@ export default function LoginScreen({
         // Successful personal login
         onLoginSuccess(user.role, user.name);
       } else {
-        setErrorMsg(`Mã PIN xác thực không chính xác cho tài khoản "${user.name}". Vui lòng thử lại!`);
+        setErrorMsg(`Mật khẩu không chính xác cho tài khoản "${user.name}".`);
       }
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleFirstPasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setErrorMsg(null);
+    if (!pendingPasswordUser) return;
+    if (!/^\d{6,12}$/.test(newPassword) || newPassword === currentDefaultPassword) {
+      setErrorMsg('Mật khẩu mới phải có 6–12 chữ số và khác mật khẩu mặc định.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setErrorMsg('Xác nhận mật khẩu mới không khớp.');
+      return;
+    }
+    try {
+      await apiChangePin(currentDefaultPassword, newPassword);
+      const { user } = await apiLogin(pendingPasswordUser.username, newPassword);
+      onLoginSuccess(user.role, user.fullName, user.employeeId);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Không đổi được mật khẩu.');
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    if (!serverMode) {
+      setErrorMsg('Đăng ký tài khoản chỉ hoạt động khi kết nối backend máy chủ.');
+      return;
+    }
 
     // Validation
     const cleanUsername = regUsername.trim().toLowerCase();
@@ -168,6 +268,29 @@ export default function LoginScreen({
       return;
     }
 
+    if (serverMode) {
+      if (registrationRequestId) {
+        try {
+          await apiVerifyRegistrationOtp(registrationRequestId, registrationOtp);
+          setRegistrationRequestId(''); setRegistrationOtp(''); setOtpPreview('');
+          setSuccessMsg('OTP hợp lệ. Yêu cầu đã gửi tới CEO phê duyệt; bạn sẽ đăng nhập sau khi tài khoản được duyệt.');
+          setActiveMode('login');
+        } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Không xác minh được OTP.'); }
+        return;
+      }
+      if (!/^\d{6,12}$/.test(regPin)) { setErrorMsg('Mật khẩu đăng ký phải có 6–12 chữ số.'); return; }
+      if (regPin !== regConfirmPin) { setErrorMsg('Xác nhận mật khẩu không trùng khớp.'); return; }
+      try {
+        const request = await apiRegister(cleanUsername, regEmployeeCode.trim(), regPhone, regPin);
+        setRegistrationRequestId(request.requestId);
+        setOtpPreview(request.otpPreview || '');
+        setSuccessMsg('Đã gửi OTP. Nhập mã xác minh để chuyển yêu cầu tới CEO phê duyệt.');
+      } catch (error) {
+        setErrorMsg(error instanceof Error ? error.message : 'Không đăng ký được tài khoản.');
+      }
+      return;
+    }
+
     const cleanFullName = regFullName.trim();
     if (!cleanFullName) {
       setErrorMsg('Họ và tên không được để trống.');
@@ -175,12 +298,12 @@ export default function LoginScreen({
     }
 
     if (regPin.length !== 4 || !/^\d+$/.test(regPin)) {
-      setErrorMsg('Mã PIN bảo mật phải gồm đúng 4 chữ số.');
+      setErrorMsg('Mật khẩu phải gồm đúng 4 chữ số.');
       return;
     }
 
     if (regPin !== regConfirmPin) {
-      setErrorMsg('Xác nhận mã PIN không trùng khớp.');
+      setErrorMsg('Xác nhận mật khẩu không trùng khớp.');
       return;
     }
 
@@ -203,7 +326,7 @@ export default function LoginScreen({
     const updatedList = [...registeredUsers, newUser];
     localStorage.setItem('erp_registered_users', JSON.stringify(updatedList));
     setRegisteredUsers(updatedList);
-    
+
     // Clear registration fields
     setRegUsername('');
     setRegFullName('');
@@ -219,8 +342,20 @@ export default function LoginScreen({
     setActiveMode('login');
   };
 
+  if (pendingPasswordUser) return (
+    <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-4 font-sans text-slate-100">
+      <form onSubmit={handleFirstPasswordChange} className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-850 p-6 shadow-2xl space-y-4">
+        <div><h1 className="text-lg font-black">Đổi mật khẩu lần đầu</h1><p className="mt-1 text-xs text-slate-400">{pendingPasswordUser.fullName} • @{pendingPasswordUser.username}</p></div>
+        {errorMsg && <div className="rounded-lg border border-rose-800 bg-rose-950/60 p-3 text-xs font-semibold text-rose-200">{errorMsg}</div>}
+        <input type="password" inputMode="numeric" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value.replace(/\D/g, ''))} placeholder="Mật khẩu mới 6–12 chữ số" className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-bold" required />
+        <input type="password" inputMode="numeric" autoComplete="new-password" value={confirmNewPassword} onChange={event => setConfirmNewPassword(event.target.value.replace(/\D/g, ''))} placeholder="Nhập lại mật khẩu mới" className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm font-bold" required />
+        <button type="submit" className="w-full rounded-xl bg-blue-600 p-3 text-xs font-black uppercase tracking-wider text-white">Đổi mật khẩu và đăng nhập</button>
+      </form>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen w-full bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans text-slate-100" id="login-container">
+    <div className="relative flex min-h-[100dvh] w-full min-w-0 items-center justify-center overflow-x-hidden bg-slate-900 p-3 font-sans text-slate-100 sm:p-4" id="login-container">
       {/* Decorative Blueprint Background Grid */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
         backgroundImage: `radial-gradient(circle, #fff 1px, transparent 1px)`,
@@ -228,16 +363,14 @@ export default function LoginScreen({
       }}></div>
 
       {/* Modern Centered Glass Card */}
-      <div className="w-full max-w-xl bg-slate-850/90 border border-slate-750 rounded-2xl shadow-2xl p-6 md:p-8 relative z-10 backdrop-blur-md animate-fade-in" id="login-card">
+      <div className="relative z-10 max-h-[calc(100dvh-1.5rem)] w-full min-w-0 max-w-xl overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-750 bg-slate-850/90 p-4 shadow-2xl backdrop-blur-md animate-fade-in sm:p-6 md:p-8" id="login-card">
         {/* Logo / Header block */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600 text-white mb-3 shadow-lg shadow-blue-500/20 font-black text-xl tracking-wider">
-            {appTitle.substring(0, 1).toUpperCase()}
-          </div>
+          <img src="/app-avatar-192.png" alt="Biểu tượng Quản trị doanh nghiệp" className="inline-block w-16 h-16 rounded-2xl object-cover mb-3 shadow-xl shadow-blue-500/20 ring-1 ring-white/10" />
           <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white mb-1">
             {appTitle}
           </h2>
-          <p className="text-[10px] md:text-xs font-bold text-slate-400 tracking-wider uppercase">
+          <p className="break-words text-[10px] font-bold uppercase tracking-wider text-slate-400 md:text-xs">
             {companyName}
           </p>
           <div className="h-px w-20 bg-blue-500 mx-auto mt-4"></div>
@@ -251,19 +384,13 @@ export default function LoginScreen({
           </div>
         )}
 
-        {/* Info or error banner */}
+        {/* Login result banner */}
         {errorMsg ? (
           <div className="mb-5 bg-rose-950/50 border border-rose-800/80 rounded-xl p-3.5 flex gap-2.5 text-rose-200 text-xs">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <span className="font-semibold">{errorMsg}</span>
           </div>
-        ) : !successMsg && (
-          <div className="mb-5 bg-blue-950/30 border border-blue-900/50 rounded-xl p-3.5 text-slate-300 text-center text-[11px] leading-relaxed">
-            {activeMode === 'login' 
-              ? 'Chào mừng bạn đến với Cổng quản trị dự án dã chiến cao tốc. Vui lòng xác thực tài khoản hoặc vai trò làm việc.'
-              : 'Đăng ký tài khoản cá nhân mới để tác nghiệp. Tài khoản được bảo mật và lưu trữ nội bộ trên trình duyệt.'}
-          </div>
-        )}
+        ) : null}
 
         {/* MAIN MODE: LOGIN */}
         {activeMode === 'login' && (
@@ -283,9 +410,9 @@ export default function LoginScreen({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Vai trò mặc định
+                Đăng nhập hệ thống
               </button>
-              <button
+              {!serverMode && <button
                 type="button"
                 onClick={() => {
                   setLoginType('personal');
@@ -302,12 +429,12 @@ export default function LoginScreen({
                 }`}
               >
                 Tài khoản cá nhân ({registeredUsers.length})
-              </button>
+              </button>}
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
               {/* Type 1: Default Role-based Grid */}
-              {loginType === 'default' && (
+              {!serverMode && loginType === 'default' && (
                 <div className="space-y-2">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                     Chọn vai trò tác nghiệp
@@ -324,6 +451,7 @@ export default function LoginScreen({
                           type="button"
                           onClick={() => {
                             setSelectedRole(role);
+                            if (role !== 'Employee') setEmployeeUsername('');
                             setErrorMsg(null);
                           }}
                           className={`text-left p-3 rounded-xl border transition-all duration-200 flex flex-col justify-between h-24 relative overflow-hidden cursor-pointer ${
@@ -362,6 +490,26 @@ export default function LoginScreen({
                 </div>
               )}
 
+              {serverMode && loginType === 'default' && (
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                    Tên đăng nhập
+                  </label>
+                  <input
+                    type="text"
+                    autoComplete="username"
+                    value={loginUsername}
+                    onChange={(event) => {
+                      setLoginUsername(event.target.value);
+                      setErrorMsg(null);
+                    }}
+                    placeholder="Tên đăng nhập hoặc mã nhân viên, ví dụ EMP-12"
+                    className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white lowercase focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500"
+                    required
+                  />
+                </div>
+              )}
+
               {/* Type 2: Personal Accounts Selection */}
               {loginType === 'personal' && (
                 <div className="space-y-4">
@@ -392,10 +540,11 @@ export default function LoginScreen({
                         className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 cursor-pointer"
                       >
                         {registeredUsers.map((u) => {
-                          const rLabel = 
-                            u.role === 'CEO' ? 'Giám Đốc (CEO)' : 
-                            u.role === 'Accountant' ? 'Kế Toán Trưởng' : 
-                            u.role === 'SiteManager' ? 'Chỉ Huy Trưởng' : 
+                          const rLabel =
+                            u.role === 'CEO' ? 'Giám Đốc (CEO)' :
+                            u.role === 'ChiefAccountant' ? 'Kế Toán Trưởng' :
+                            u.role === 'SiteAccountant' ? 'Kế Toán Công Trường' :
+                            u.role === 'SiteManager' ? 'Chỉ Huy Trưởng' :
                             'Thanh Tra / Khách';
                           return (
                             <option key={u.username} value={u.username} className="bg-slate-900 text-white font-semibold">
@@ -414,23 +563,20 @@ export default function LoginScreen({
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                      Nhập mã khóa PIN xác thực
+                      Mật khẩu đăng nhập
                     </label>
-                    <span className="text-[9px] font-mono text-slate-500">
-                      Yêu cầu 4 chữ số
-                    </span>
                   </div>
 
                   <div className="relative">
                     <input
                       type={showPin ? 'text' : 'password'}
-                      maxLength={4}
+                      maxLength={serverMode ? 12 : 4}
                       value={pin}
                       onChange={(e) => {
                         setPin(e.target.value.replace(/\D/g, ''));
                         setErrorMsg(null);
                       }}
-                      placeholder="••••"
+                      placeholder="Nhập mật khẩu"
                       className="block w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-center text-sm font-bold font-mono tracking-[1.5em] pl-[2em] text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 placeholder:tracking-normal placeholder:pl-0 placeholder:text-slate-600 transition-all shadow-inner"
                       required
                     />
@@ -452,7 +598,7 @@ export default function LoginScreen({
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/10 transition-all cursor-pointer group mt-2"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Xác thực & Vào hệ thống</span>
+                  <span>Đăng nhập</span>
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </button>
               )}
@@ -511,6 +657,9 @@ export default function LoginScreen({
               <span className="text-[9px] text-slate-500 block">Viết liền, không dấu, ít nhất 3 ký tự, dùng để đăng nhập.</span>
             </div>
 
+            {serverMode && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="min-w-0 space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Mã nhân viên *</label><input className="block w-full min-w-0 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regEmployeeCode} onChange={e=>setRegEmployeeCode(e.target.value)} placeholder="emp-17 hoặc mã NV" required/></div><div className="min-w-0 space-y-1"><label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Số điện thoại hồ sơ *</label><input className="block w-full min-w-0 px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white" value={regPhone} onChange={e=>setRegPhone(e.target.value.replace(/\D/g,''))} placeholder="0961001001" required/></div></div>}
+
+            {!serverMode && <>
             {/* Full Name */}
             <div className="space-y-1">
               <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
@@ -537,25 +686,33 @@ export default function LoginScreen({
                 className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80 focus:border-blue-500 cursor-pointer"
               >
                 <option value="CEO">Giám Đốc (CEO) - Đặc quyền tối cao</option>
-                <option value="Accountant">Kế Toán Trưởng - Sổ sách & Nhân sự</option>
+                <option value="ChiefAccountant">Kế Toán Trưởng - Kiểm soát tài chính</option>
+                <option value="SiteAccountant">Kế Toán Công Trường - Dự án được phân công</option>
                 <option value="SiteManager">Chỉ Huy Trưởng - Kho bãi & Công trường</option>
                 <option value="Auditor">Thanh Tra / Khách - Chế độ chỉ xem</option>
               </select>
               <span className="text-[9px] text-slate-500 block">Vai trò quyết định phân quyền truy cập các mô-đun trong app.</span>
             </div>
+            </>}
 
+            {serverMode && registrationRequestId ? <div className="space-y-2 rounded-xl border border-blue-800 bg-blue-950/40 p-4">
+              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-blue-300">Mã OTP 6 chữ số</label>
+              <input value={registrationOtp} onChange={event => setRegistrationOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className="block w-full rounded-xl border border-blue-800 bg-slate-900 px-4 py-3 text-center font-mono text-lg tracking-[0.5em] text-white" required />
+              {otpPreview && <p className="text-[10px] text-amber-300">Mã thử nghiệm local: {otpPreview}</p>}
+              <p className="text-[10px] text-slate-400">OTP hết hạn sau 10 phút. Sau xác minh, CEO phải duyệt trước khi tài khoản hoạt động.</p>
+            </div> : <>
             {/* Pin Code & Confirm PIN Grid */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                    Mã PIN bảo mật *
+                    Mật khẩu đăng nhập *
                   </label>
                 </div>
                 <div className="relative">
                   <input
                     type={showRegPin ? 'text' : 'password'}
-                    maxLength={4}
+                    maxLength={serverMode ? 12 : 4}
                     value={regPin}
                     onChange={(e) => setRegPin(e.target.value.replace(/\D/g, ''))}
                     placeholder="••••"
@@ -570,25 +727,26 @@ export default function LoginScreen({
                     {showRegPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <span className="text-[8px] text-slate-500 block">4 chữ số tự chọn</span>
+                <span className="text-[8px] text-slate-500 block">{serverMode ? '6–12 chữ số tự chọn' : '4 chữ số tự chọn'}</span>
               </div>
 
               <div className="space-y-1">
                 <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                  Xác nhận mã PIN *
+                  Xác nhận mật khẩu *
                 </label>
                 <input
                   type={showRegPin ? 'text' : 'password'}
-                  maxLength={4}
+                  maxLength={serverMode ? 12 : 4}
                   value={regConfirmPin}
                   onChange={(e) => setRegConfirmPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
                   className="block w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-center text-xs font-bold font-mono tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-blue-500/80"
                   required
                 />
-                <span className="text-[8px] text-slate-500 block">Nhập lại mã PIN trên</span>
+                <span className="text-[8px] text-slate-500 block">Nhập lại mật khẩu trên</span>
               </div>
             </div>
+            </>}
 
             {/* Register button */}
             <button
@@ -596,7 +754,7 @@ export default function LoginScreen({
               className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/10 transition-all cursor-pointer mt-2"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Xác nhận Đăng ký tài khoản</span>
+              <span>{registrationRequestId ? 'Xác minh OTP & gửi duyệt' : 'Gửi yêu cầu đăng ký'}</span>
             </button>
           </form>
         )}

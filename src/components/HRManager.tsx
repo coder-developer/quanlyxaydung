@@ -1,23 +1,23 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Users, 
-  UserPlus, 
-  Clock, 
-  Calendar, 
-  DollarSign, 
-  FileText, 
-  Search, 
-  Building2, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  UserCheck, 
-  ArrowRightLeft, 
-  Plus, 
-  Printer, 
-  Calculator, 
-  FileSpreadsheet, 
-  MapPin, 
+import {
+  Users,
+  UserPlus,
+  Clock,
+  Calendar,
+  DollarSign,
+  FileText,
+  Search,
+  Building2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  UserCheck,
+  ArrowRightLeft,
+  Plus,
+  Printer,
+  Calculator,
+  FileSpreadsheet,
+  MapPin,
   Briefcase,
   ShieldAlert,
   Wallet,
@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Employee, Project, Timesheet, FinancialTransaction, LaborContract, ConstructionTask, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 
 interface HRManagerProps {
   projects: Project[];
@@ -67,6 +68,7 @@ export default function HRManager({
   globalSearchQuery,
   userRole
 }: HRManagerProps) {
+  const isSiteManager = userRole === 'SiteManager';
   // State managers
   const [hrSubTab, setHrSubTab] = useState<'employees' | 'attendance' | 'payroll' | 'contracts' | 'schedule'>('employees');
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,10 +174,10 @@ export default function HRManager({
     const lateDays = empTimes.filter(t => t.status === 'Late' || (t.checkInTime && t.checkInTime > '08:00')).length;
     const absentDays = empTimes.filter(t => t.status === 'Absent').length;
     const gpsViolations = empTimes.filter(t => t.gpsStatus === 'Out-Of-Range').length;
-    
+
     const maxAllowedAbsents = 3;
     const maxAllowedLates = 3;
-    
+
     const violations: string[] = [];
     if (absentDays > maxAllowedAbsents) {
       violations.push(`Nghỉ quá số ngày quy định: Tự ý vắng mặt ${absentDays} ngày (Quy định tối đa không quá ${maxAllowedAbsents} ngày/tháng).`);
@@ -184,9 +186,9 @@ export default function HRManager({
       violations.push(`Đi muộn quá số ngày quy định: Đi muộn ${lateDays} lần (Quy định tối đa không quá ${maxAllowedLates} lần/tháng).`);
     }
     if (gpsViolations > 0) {
-      violations.push(`Vi phạm kỷ luật vị trí: Phát hiện ${gpsViolations} lượt chấm công ngoài bán kính thiết lập của công trường dã chiến.`);
+      violations.push(`Vi phạm kỷ luật vị trí: Phát hiện ${gpsViolations} lượt chấm công ngoài bán kính thiết lập của công trường .`);
     }
-    
+
     const hasViolations = violations.length > 0;
     return {
       lateDays,
@@ -235,7 +237,7 @@ export default function HRManager({
   // Filter Employees
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
-      const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             emp.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             emp.id.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesProject = selectedProjectFilter === 'all' || emp.projectId === selectedProjectFilter;
@@ -247,26 +249,39 @@ export default function HRManager({
   // Handle Employee Add/Edit
   const handleSaveEmployee = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSiteManager && editingEmp) {
+      showToast('Chỉ huy trưởng chỉ được thêm nhân sự mới cho công trường mình quản lý.');
+      return;
+    }
     if (!newEmp.name || !newEmp.role || !newEmp.phone) {
       showToast('Vui lòng điền đầy đủ các trường thông tin bắt buộc.');
+      return;
+    }
+    const employeeCode = normalizeBusinessId(newEmp.code || `NV-${(employees.length + 1).toString().padStart(3, '0')}`, `NV-${(employees.length + 1).toString().padStart(3, '0')}`);
+    if (employees.some(emp => emp.id !== editingEmp?.id && (emp.id === employeeCode || emp.code === employeeCode))) {
+      showToast(`Mã nhân viên ${employeeCode} đã tồn tại.`);
       return;
     }
 
     if (editingEmp) {
       // Edit mode
-      setEmployees(prev => prev.map(emp => emp.id === editingEmp.id ? { ...emp, ...newEmp } : emp));
+      setEmployees(prev => prev.map(emp => emp.id === editingEmp.id ? { ...emp, ...newEmp, code: employeeCode } : emp));
       showToast(`Đã cập nhật thông tin nhân viên ${newEmp.name} thành công.`);
     } else {
       // Create mode
-      const generatedId = `emp-${Date.now().toString().slice(-4)}`;
-      const generatedCode = newEmp.code || `NV-${(employees.length + 1).toString().padStart(3, '0')}`;
       const createdEmp: Employee = {
-        id: generatedId,
+        id: employeeCode,
         ...newEmp,
-        code: generatedCode
+        code: employeeCode,
+        ...(isSiteManager ? {
+          role: 'Nhân viên công trường',
+          projectId: projects[0]?.id || '',
+          baseSalary: 0,
+          active: true,
+        } : {}),
       };
       setEmployees(prev => [createdEmp, ...prev]);
-      showToast(`Đã thêm mới nhân viên ${newEmp.name} (Mã số: ${generatedCode}) thành công.`);
+      showToast(`Đã thêm mới nhân viên ${newEmp.name} (Mã số: ${employeeCode}) thành công.`);
     }
 
     setShowAddEmpModal(false);
@@ -390,16 +405,16 @@ export default function HRManager({
     if (calculatedSalary < 0) calculatedSalary = 0;
 
     const advances = transactions
-      .filter(tx => tx.projectId === emp.projectId && 
-                    tx.category === 'Labor' && 
-                    tx.description.toLowerCase().includes('tạm ứng') && 
+      .filter(tx => tx.projectId === emp.projectId &&
+                    tx.category === 'Labor' &&
+                    tx.description.toLowerCase().includes('tạm ứng') &&
                     tx.description.toLowerCase().includes(emp.name.toLowerCase()))
       .reduce((sum, tx) => sum + tx.amount, 0);
 
     const salariesPaid = transactions
-      .filter(tx => tx.projectId === emp.projectId && 
-                    tx.category === 'Labor' && 
-                    tx.description.toLowerCase().includes('chi lương') && 
+      .filter(tx => tx.projectId === emp.projectId &&
+                    tx.category === 'Labor' &&
+                    tx.description.toLowerCase().includes('chi lương') &&
                     tx.description.toLowerCase().includes(emp.name.toLowerCase()))
       .reduce((sum, tx) => sum + tx.amount, 0);
 
@@ -426,7 +441,7 @@ export default function HRManager({
     const filename = `Bang_cham_cong_${emp.name.replace(/\s+/g, '_')}_thang_${selectedMonth}_${selectedYear}.xls`;
     let tableRows = '';
     const sortedSheets = [...data.empSheets].sort((a, b) => a.date.localeCompare(b.date));
-    
+
     sortedSheets.forEach((sheet, index) => {
       let statusVi = '';
       switch(sheet.status) {
@@ -436,7 +451,7 @@ export default function HRManager({
         case 'Absent': statusVi = 'Vắng mặt'; break;
         default: statusVi = sheet.status;
       }
-      
+
       tableRows += `
         <tr>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${index + 1}</td>
@@ -444,7 +459,7 @@ export default function HRManager({
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.checkInTime || '-'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.checkOutTime || '-'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px; font-weight: bold;">${statusVi}</td>
-          <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.verifiedByFace ? 'Đã xác minh FaceID' : 'Ghi nhận thủ công'}</td>
+          <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.verifiedByFace ? 'Có ảnh xác minh' : 'Không có ảnh'}</td>
           <td style="border: 1px solid #cbd5e1; text-align: center; padding: 6px;">${sheet.gpsStatus === 'In-Range' ? 'Trong phạm vi' : 'Ngoài phạm vi'}</td>
         </tr>
       `;
@@ -463,7 +478,7 @@ export default function HRManager({
         <div style="font-size: 11pt; text-align: center; margin-bottom: 20px; color: #475569;">
           Tháng ${selectedMonth} Năm ${selectedYear}
         </div>
-        
+
         <table style="margin-bottom: 15px; font-size: 10pt;">
           <tr>
             <td style="font-weight: bold; width: 120px;">Nhân sự:</td>
@@ -491,7 +506,7 @@ export default function HRManager({
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 80px;">Giờ Vào</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 80px;">Giờ Ra</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 120px;">Trạng Thái</th>
-              <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 160px;">Xác Minh FaceID</th>
+              <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 160px;">Ảnh xác minh</th>
               <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; width: 180px;">Định Vị GPS</th>
             </tr>
           </thead>
@@ -518,7 +533,7 @@ export default function HRManager({
             <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold; color: #c2410c;">${data.daysAbsent} ngày</td>
           </tr>
         </table>
-        
+
         <div style="margin-top: 40px; text-align: right; font-size: 10pt; font-style: italic;">
           Xuất dữ liệu lúc: ${new Date().toLocaleString('vi-VN')}
         </div>
@@ -644,7 +659,7 @@ export default function HRManager({
             <td style="text-align: center; padding-top: 10px; font-weight: bold; color: #334155;">Ban Kế Toán</td>
           </tr>
         </table>
-        
+
         <div style="margin-top: 40px; text-align: right; font-size: 10pt; font-style: italic;">
           Xuất phiếu lương lúc: ${new Date().toLocaleString('vi-VN')}
         </div>
@@ -774,7 +789,7 @@ export default function HRManager({
       // Base wage calculation
       let calculatedSalary = 0;
       let note = '';
-      
+
       // Heuristic: If baseSalary < 1000000, it is daily wage. If >= 1000000, monthly contract.
       const isDailyWage = emp.baseSalary < 1500000;
 
@@ -799,17 +814,19 @@ export default function HRManager({
 
       // Find cash advances already disbursed to this employee in this month
       const advances = transactions
-        .filter(tx => tx.projectId === emp.projectId && 
-                      tx.category === 'Labor' && 
-                      tx.description.toLowerCase().includes('tạm ứng') && 
+        .filter(tx => tx.projectId === emp.projectId &&
+                      tx.date.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`) &&
+                      tx.category === 'Labor' &&
+                      tx.description.toLowerCase().includes('tạm ứng') &&
                       tx.description.toLowerCase().includes(emp.name.toLowerCase()))
         .reduce((sum, tx) => sum + tx.amount, 0);
 
       // Paid salaries
       const salariesPaid = transactions
-        .filter(tx => tx.projectId === emp.projectId && 
-                      tx.category === 'Labor' && 
-                      tx.description.toLowerCase().includes('chi lương') && 
+        .filter(tx => tx.projectId === emp.projectId &&
+                      tx.date.startsWith(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`) &&
+                      tx.category === 'Labor' &&
+                      tx.description.toLowerCase().includes('chi lương') &&
                       tx.description.toLowerCase().includes(emp.name.toLowerCase()))
         .reduce((sum, tx) => sum + tx.amount, 0);
 
@@ -858,7 +875,7 @@ export default function HRManager({
   const handleOpenVoucherModal = (item: typeof payrollData[0], type: 'Salary_Payment' | 'Salary_Advance') => {
     const proj = projects.find(p => p.id === item.employee.projectId) || projects[0];
     const amountToDisburse = type === 'Salary_Advance' ? Math.round(item.baseSalary * 0.3) : item.netSalaryPayable;
-    
+
     if (amountToDisburse <= 0 && type === 'Salary_Payment') {
       showToast(`Không có dư nợ lương cần thanh toán cho ${item.employee.name}.`);
       return;
@@ -871,8 +888,8 @@ export default function HRManager({
       type,
       project: proj,
       date: new Date().toISOString().split('T')[0],
-      note: type === 'Salary_Advance' 
-        ? `Tạm ứng 30% lương tháng ${selectedMonth}/${selectedYear} cho nhân sự ${item.employee.name}` 
+      note: type === 'Salary_Advance'
+        ? `Tạm ứng 30% lương tháng ${selectedMonth}/${selectedYear} cho nhân sự ${item.employee.name}`
         : `Chi trả tiền lương thực nhận tháng ${selectedMonth}/${selectedYear} cho nhân sự ${item.employee.name}`,
       preparedBy: 'Kế toán Trưởng',
       isProcessed: false
@@ -903,7 +920,7 @@ export default function HRManager({
     setTransactions(prev => [newTx, ...prev]);
 
     // 2. Cascade update to project: add to project spent budget!
-    setProjects(prevProjs => 
+    setProjects(prevProjs =>
       prevProjs.map(p => {
         if (p.id === pId) {
           return {
@@ -923,7 +940,7 @@ export default function HRManager({
   const handleExportPayrollExcel = () => {
     const filename = `Bang_luong_thang_${selectedMonth}_${selectedYear}.xls`;
     const reportDateStr = new Date().toLocaleString('vi-VN');
-    
+
     let tableRows = '';
     payrollData.forEach((item, index) => {
       tableRows += `
@@ -970,8 +987,8 @@ export default function HRManager({
         </style>
       </head>
       <body>
-        <div style="font-weight: bold; text-transform: uppercase; font-size: 10pt;">${companyConfig?.companyName || 'CONSTRUCT-OS ERP CONSTRUCTION'}</div>
-        <div style="font-size: 9pt; color: #64748b;">Hệ thống Hạch toán Tiền lương & Chấm công dã chiến</div>
+        <div style="font-weight: bold; text-transform: uppercase; font-size: 10pt;">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</div>
+        <div style="font-size: 9pt; color: #64748b;">Hệ thống Hạch toán Tiền lương & Chấm công </div>
         <br>
         <div class="title">BẢNG THANH TOÁN TIỀN LƯƠNG & CHẤM CÔNG NHÂN SỰ CHUNG</div>
         <div style="text-align: center; font-style: italic; font-size: 10pt; margin-bottom: 20px;">Tháng ${selectedMonth} năm ${selectedYear} &bull; Dự án: ${selectedPayrollProj === 'all' ? 'Tất cả công trường' : getProjectName(selectedPayrollProj)}</div>
@@ -1142,7 +1159,7 @@ export default function HRManager({
       <body>
         <table class="header-table">
           <tr>
-            <td colspan="3" style="font-weight: bold; text-transform: uppercase;">${companyConfig?.companyName || 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}</td>
+            <td colspan="3" style="font-weight: bold; text-transform: uppercase;">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</td>
             <td colspan="3" style="text-align: right; font-weight: bold; font-family: monospace;">MÃ PHIẾU: ${voucher.id}</td>
           </tr>
           <tr>
@@ -1150,7 +1167,7 @@ export default function HRManager({
             <td colspan="3" style="text-align: right;">Mẫu số: 02-TT (Ban hành theo TT 200/2014/TT-BTC)</td>
           </tr>
           <tr>
-            <td colspan="3">Địa điểm công trường: ${companyConfig?.siteOffice || 'Dã chiến quốc lộ / Công trình cấp bách'}</td>
+            <td colspan="3">Địa điểm công trường: ${companyConfig?.siteOffice || ' quốc lộ / Công trình cấp bách'}</td>
             <td colspan="3" style="text-align: right;">Ngày hạch toán: ${voucher.date}</td>
           </tr>
         </table>
@@ -1211,7 +1228,7 @@ export default function HRManager({
         </table>
 
         <br><br>
-        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán nhân sự ${companyConfig?.appTitle || 'Construct-OS'} &bull; Ngày xuất file: ${reportDateStr}</div>
+        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán nhân sự ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'} &bull; Ngày xuất file: ${reportDateStr}</div>
       </body>
       </html>
     `;
@@ -1233,7 +1250,7 @@ export default function HRManager({
     const emp = employees.find(e => e.id === previewingContract.employeeId);
     const employeeName = emp ? emp.name : '.....................................';
     const proj = projects.find(p => p.id === previewingContract.projectId);
-    
+
     const d = new Date();
     const dayStr = String(d.getDate()).padStart(2, '0');
     const monthStr = String(d.getMonth() + 1).padStart(2, '0');
@@ -1301,13 +1318,13 @@ export default function HRManager({
       </head>
       <body style="font-family:'Times New Roman', Times, serif; font-size:13.0pt; line-height:1.3; margin:0; padding:0; color:#000000;">
         <div class="Section1">
-          
+
           <!-- Standard 2-Column Administrative Header Table -->
           <table style="width:100%; border:none; border-collapse:collapse; margin-bottom:20.0pt; font-family:'Times New Roman',serif;">
             <tr>
               <td style="width:45%; text-align:center; vertical-align:top; padding:0;">
                 <span style="font-weight:bold; text-transform:uppercase; font-size:11.0pt; display:block; line-height:1.2;">
-                  ${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}
+                  ${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                 </span>
                 <span style="font-size:11.0pt; display:block; margin-top:4.0pt;">
                   Số: ${previewingContract.contractNumber}
@@ -1348,12 +1365,13 @@ export default function HRManager({
             <table style="width:100%; border:none; border-collapse:collapse; margin-left:0.5cm;">
               <tr>
                 <td style="width:100%; padding:2.0pt 0; font-size:13.0pt;">
-                  - <strong>Tên Đơn Vị</strong>: ${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN XÂY DỰNG VÀ QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}
+                  - <strong>Tên Đơn Vị</strong>: ${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                 </td>
               </tr>
               <tr>
                 <td style="width:100%; padding:2.0pt 0; font-size:13.0pt;">
-                  - Địa chỉ: ${companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}
+                  - Địa chỉ văn phòng: ${companyConfig?.officeAddress || companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}<br/>
+                  - Mã số thuế: ${companyConfig?.taxCode || ''}
                 </td>
               </tr>
               <tr>
@@ -1426,35 +1444,35 @@ export default function HRManager({
 
           <!-- Terms -->
           <p style="${headingStyle}">Điều 1: Thời hạn và công việc hợp đồng</p>
-          <p style="${pBulletStyle}">1.1. Loại hợp đồng lao động: ${isInternal ? 'Hợp đồng lao động xác định thời hạn (12 tháng)' : 'Hợp đồng lao động thời vụ / khoán ngày dã chiến'}</p>
+          <p style="${pBulletStyle}">1.1. Loại hợp đồng lao động: ${isInternal ? 'Hợp đồng lao động xác định thời hạn (12 tháng)' : 'Hợp đồng lao động thời vụ / khoán ngày '}</p>
           <p style="${pBulletStyle}">1.2. Thời hạn từ ngày ${startDateFormatted} ${previewingContract.endDate ? `đến ngày ${endDateFormatted}` : 'cho đến khi hoàn thành bàn giao dự án xây dựng (Vô thời hạn)'}.</p>
-          <p style="${pBulletStyle}">1.3. Đơn vị làm việc: ${companyConfig?.companyName || 'Công ty Cổ phần Xây dựng và Quản lý dự án Construct-OS ERP'}</p>
+          <p style="${pBulletStyle}">1.3. Đơn vị làm việc: ${companyConfig?.companyName || 'Công ty Cổ phần Đầu tư & Xây dựng Đất Việt'}</p>
           <p style="${pBulletStyle}">1.4. Địa điểm làm việc: ${proj?.name || 'Văn phòng Công ty và các Công trường Dự án trực thuộc'}</p>
           <p style="${pBulletStyle}">1.5. Chức vụ/chức danh chuyên môn: <strong>${emp?.role || 'Kỹ sư chuyên môn'}</strong></p>
           <p style="${pBulletStyle}">1.6. Nội dung công việc/Mô tả công việc chính:</p>
           <p style="${pBulletStyle}margin-left:2.0cm; text-indent:-0.6cm;">- Thực hiện công việc theo sự sắp xếp của lãnh đạo Công ty và các trưởng, phó bộ phận;</p>
           <p style="${pBulletStyle}margin-left:2.0cm; text-indent:-0.6cm;">- Thực hiện công tác chuyên môn theo bảng mô tả công việc vị trí chuyên môn; bảo đảm chất lượng, tiến độ và quy chuẩn kỹ thuật xây dựng hiện hành;</p>
           <p style="${pBulletStyle}margin-left:2.0cm; text-indent:-0.6cm;">- Người lao động đồng ý rằng Người sử dụng lao động có thể quyết định một cách hợp lý chức vụ của Người lao động và việc thuyên chuyển Người lao động trong các phòng ban của Công ty phù hợp với chuyên môn và năng lực thực tế;</p>
-          <p style="${pBulletStyle}margin-left:2.0cm; text-indent:-0.6cm;">- Hoàn thành tốt công việc được giao theo định mức sản lượng, thời gian công nghệ và đạt chất lượng theo quy định – chấp hành tốt nội quy kỷ luật, quy trình an toàn lao động dã chiến tại công trường.</p>
+          <p style="${pBulletStyle}margin-left:2.0cm; text-indent:-0.6cm;">- Hoàn thành tốt công việc được giao theo định mức sản lượng, thời gian công nghệ và đạt chất lượng theo quy định – chấp hành tốt nội quy kỷ luật, quy trình an toàn lao động tại công trường.</p>
 
           <p style="${headingStyle}">Điều 2: Chế độ làm việc</p>
           <p style="${pBulletStyle}">2.1. Thời giờ làm việc: 8 tiếng/ngày. Buổi sáng: 8h00 – 12h00, Buổi chiều: 13h30 – 17h30. Làm việc từ thứ 2 đến hết sáng thứ 7 hàng tuần.</p>
-          <p style="${pBulletStyle}">2.2. Do đặc thù công trình và hoạt động thi công, thời gian làm việc có thể linh hoạt theo ca dã chiến điều phối bởi Chỉ huy trưởng công trường.</p>
+          <p style="${pBulletStyle}">2.2. Do đặc thù công trình và hoạt động thi công, thời gian làm việc có thể linh hoạt theo ca do Chỉ huy trưởng công trường điều phối.</p>
           <p style="${pBulletStyle}">2.3. Thiết bị và công cụ làm việc chuyên dùng sẽ do Công ty cấp phát trực tiếp tại kho dự án.</p>
           <p style="${pBulletStyle}">2.4. Điều kiện bảo hộ và an toàn lao động tại nơi làm việc tuân thủ nghiêm ngặt Luật an toàn vệ sinh lao động.</p>
 
           <p style="${headingStyle}">Điều 3: Quyền lợi và nghĩa vụ của Người lao động</p>
           <p style="${pBulletStyle}font-weight:bold;">3.1. Quyền lợi:</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(i) Phương tiện đi lại: Người lao động tự túc.</p>
-          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Mức lương chính thức: <strong>${salaryFormatted}</strong> (${previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua AI Face ID'}).</p>
-          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iii) Các khoản phụ cấp: <strong>${allowanceFormatted}</strong> (phụ cấp theo quy chế lương dã chiến và hoạt động của Công ty).</p>
+          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Mức lương chính thức: <strong>${salaryFormatted}</strong> (${previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua hệ thống chấm công'}).</p>
+          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iii) Các khoản phụ cấp: <strong>${allowanceFormatted}</strong> (phụ cấp theo quy chế lương và hoạt động của Công ty).</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iv) Chế độ nâng lương: Đánh giá định kỳ theo hiệu quả KPI hoạt động cuối năm.</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(v) Chế độ Bảo hiểm: ${previewingContract.insurance ? 'Được đóng đầy đủ BHXH, BHYT, BHTN theo tỷ lệ quy định trích lập lương doanh nghiệp.' : 'Mức lương trên đã bao gồm phụ trội thay thế trực tiếp vào lương, người lao động tự túc đóng BHXH tự nguyện.'}</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(vi) Trang bị bảo hộ lao động: Cấp phát định kỳ 2 bộ quần áo bảo hộ, mũ và giày bảo hộ công trường.</p>
 
           <p style="${pBulletStyle}font-weight:bold;">3.2. Nghĩa vụ:</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(i) Hoàn thành những công việc theo thỏa thuận trong hợp đồng lao động này. Chấp hành nghiêm chỉnh nội quy lao động, quy trình kỹ thuật thi công;</p>
-          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Bảo quản giữ gìn tài sản chung, máy móc trang bị dã chiến của Công ty bàn giao;</p>
+          <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(ii) Bảo quản giữ gìn tài sản chung, máy móc trang bị của Công ty bàn giao;</p>
           <p style="${pBulletStyle}margin-left:1.5cm; text-indent:-0.6cm;">(iii) Giữ bí mật thông tin kinh doanh, bí mật công nghệ quản lý ERP của Công ty.</p>
 
           <p style="${headingStyle}">Điều 4: Quyền hạn và nghĩa vụ của Người sử dụng lao động</p>
@@ -1531,8 +1549,8 @@ export default function HRManager({
     const targetProjId = newTask.projectId;
     const projectTasks = updatedTasksList.filter(t => t.projectId === targetProjId);
     const totalWeight = projectTasks.reduce((s, t) => s + t.weight, 0);
-    const calculatedProgress = totalWeight > 0 
-      ? Math.round(projectTasks.reduce((s, t) => s + (t.progress * t.weight), 0) / totalWeight) 
+    const calculatedProgress = totalWeight > 0
+      ? Math.round(projectTasks.reduce((s, t) => s + (t.progress * t.weight), 0) / totalWeight)
       : 0;
 
     setProjects(prevProjs => prevProjs.map(p => {
@@ -1596,8 +1614,8 @@ export default function HRManager({
     // Recalculate Project physical progress
     const projectTasks = updatedTasksList.filter(item => item.projectId === t.projectId);
     const totalWeight = projectTasks.reduce((s, item) => s + item.weight, 0);
-    const calculatedProgress = totalWeight > 0 
-      ? Math.round(projectTasks.reduce((s, item) => s + (item.progress * item.weight), 0) / totalWeight) 
+    const calculatedProgress = totalWeight > 0
+      ? Math.round(projectTasks.reduce((s, item) => s + (item.progress * item.weight), 0) / totalWeight)
       : 0;
 
     setProjects(prevProjs => prevProjs.map(p => {
@@ -1623,8 +1641,8 @@ export default function HRManager({
       // Recalculate Project progress
       const projectTasks = updatedTasksList.filter(item => item.projectId === projId);
       const totalWeight = projectTasks.reduce((s, item) => s + item.weight, 0);
-      const calculatedProgress = totalWeight > 0 
-        ? Math.round(projectTasks.reduce((s, item) => s + (item.progress * item.weight), 0) / totalWeight) 
+      const calculatedProgress = totalWeight > 0
+        ? Math.round(projectTasks.reduce((s, item) => s + (item.progress * item.weight), 0) / totalWeight)
         : 0;
 
       setProjects(prevProjs => prevProjs.map(p => {
@@ -1638,22 +1656,6 @@ export default function HRManager({
 
   return (
     <div className="bg-slate-50 min-h-[500px]" id="hr-payroll-section">
-      {/* Role-Based Info Banner */}
-      {(userRole === 'Auditor' || userRole === 'SiteManager') && (
-        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] flex items-center justify-between gap-3 text-amber-850">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-xs uppercase tracking-wider text-[9px] shrink-0">
-              {userRole === 'Auditor' ? 'Thanh tra / Khách' : 'Chỉ Huy Trưởng'}
-            </span>
-            <span>
-              {userRole === 'Auditor' 
-                ? 'Bạn đang ở chế độ xem báo cáo dã chiến. Các thao tác thêm mới, sửa đổi thông tin hoặc phê duyệt thanh toán bị khóa.'
-                : 'Bạn đang quản lý công trường dã chiến. Các thao tác sửa thông tin, đổi tiền công, ký kết hợp đồng lao động và duyệt chi lương chỉ dành cho CEO/Kế toán.'}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Mini tabs */}
       <div className="flex border-b border-slate-200 bg-white px-4 pt-1 shadow-xs gap-4 mb-4">
         <button
@@ -1776,11 +1778,11 @@ export default function HRManager({
                 setEditingEmp(null);
                 setNewEmp({
                   name: '',
-                  role: '',
+                  role: isSiteManager ? 'Nhân viên công trường' : '',
                   type: 'Internal',
                   projectId: projects[0]?.id || '',
                   phone: '',
-                  baseSalary: 15000000,
+                  baseSalary: isSiteManager ? 0 : 15000000,
                   active: true,
                   citizenId: '',
                   permanentAddress: ''
@@ -1894,13 +1896,13 @@ export default function HRManager({
                           </button>
                           <button
                             onClick={() => handleEditEmpClick(emp)}
-                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] transition-all"
+                            className={`px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-[10px] transition-all ${isSiteManager ? 'hidden' : ''}`}
                           >
                             Sửa
                           </button>
                           <button
                             onClick={() => handleDeleteEmployee(emp.id, emp.name)}
-                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md font-bold text-[10px] transition-all"
+                            className={`px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-md font-bold text-[10px] transition-all ${isSiteManager ? 'hidden' : ''}`}
                           >
                             Xóa
                           </button>
@@ -2022,7 +2024,7 @@ export default function HRManager({
                     <th className="px-4 py-2.5">Địa điểm</th>
                     <th className="px-4 py-2.5 text-center">Trạng thái</th>
                     <th className="px-4 py-2.5 text-center">GPS Tracker</th>
-                    <th className="px-4 py-2.5 text-center">Nhận diện khuôn mặt (AI Face ID)</th>
+                    <th className="px-4 py-2.5 text-center">Ảnh xác minh chấm công</th>
                     <th className="px-4 py-2.5 text-center">Phê duyệt lúc về</th>
                   </tr>
                 </thead>
@@ -2351,6 +2353,7 @@ export default function HRManager({
                   <input
                     type="text"
                     required
+                    readOnly={isSiteManager}
                     placeholder="Ví dụ: Kỹ sư cơ điện"
                     value={newEmp.role}
                     onChange={(e) => setNewEmp(prev => ({ ...prev, role: e.target.value }))}
@@ -2400,8 +2403,8 @@ export default function HRManager({
                     value={newEmp.type}
                     onChange={(e) => {
                       const typeVal = e.target.value as 'Internal' | 'Seasonal';
-                      setNewEmp(prev => ({ 
-                        ...prev, 
+                      setNewEmp(prev => ({
+                        ...prev,
                         type: typeVal,
                         baseSalary: typeVal === 'Internal' ? 15000000 : 350000
                       }));
@@ -2417,6 +2420,7 @@ export default function HRManager({
                   <label className="text-[10px] font-extrabold text-slate-400 uppercase">Bố trí công trình *</label>
                   <select
                     value={newEmp.projectId}
+                    disabled={isSiteManager}
                     onChange={(e) => setNewEmp(prev => ({ ...prev, projectId: e.target.value }))}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white focus:outline-none"
                   >
@@ -2427,7 +2431,7 @@ export default function HRManager({
                 </div>
               </div>
 
-              <div className="space-y-1">
+              {!isSiteManager && <div className="space-y-1">
                 <label className="text-[10px] font-extrabold text-slate-400 uppercase block">
                   Mức lương thỏa thuận (VND) *
                 </label>
@@ -2443,9 +2447,9 @@ export default function HRManager({
                     {newEmp.type === 'Internal' ? 'VND / Tháng' : 'VND / Ngày'}
                   </span>
                 </div>
-              </div>
+              </div>}
 
-              <div className="flex items-center gap-2 pt-2">
+              {!isSiteManager && <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
                   id="active-checkbox"
@@ -2456,7 +2460,13 @@ export default function HRManager({
                 <label htmlFor="active-checkbox" className="text-xs font-bold text-slate-700">
                   Nhân sự đang tích cực làm việc (Được phép chấm công)
                 </label>
-              </div>
+              </div>}
+
+              {isSiteManager && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                  Nhân sự mới được gắn vào công trường hiện tại, tạo tài khoản đăng nhập tự động và chưa có quyền khai báo mức lương.
+                </div>
+              )}
 
               <div className="flex gap-2 pt-4 border-t border-slate-100 justify-end">
                 <button
@@ -2499,8 +2509,8 @@ export default function HRManager({
                   onChange={(e) => {
                     const empId = e.target.value;
                     const empObj = employees.find(item => item.id === empId);
-                    setNewCheckIn(prev => ({ 
-                      ...prev, 
+                    setNewCheckIn(prev => ({
+                      ...prev,
                       employeeId: empId,
                       projectId: empObj ? empObj.projectId : prev.projectId
                     }));
@@ -2602,7 +2612,7 @@ export default function HRManager({
                   className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
                 />
                 <label htmlFor="face-checked" className="text-xs font-bold text-slate-700">
-                  Xác minh khuôn mặt thông qua Camera AI hiện trường
+                  Có ảnh xác minh chấm công
                 </label>
               </div>
 
@@ -2643,7 +2653,7 @@ export default function HRManager({
               {/* Invoice Header */}
               <div className="flex items-start justify-between border-b-2 border-dashed border-slate-200 pb-4">
                 <div>
-                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-tight">{companyConfig?.companyName || 'TẬP ĐOÀN ĐẦU TƯ XÂY DỰNG CONSTRUCT-OS'}</h4>
+                  <h4 className="font-extrabold text-xs text-slate-800 uppercase tracking-tight">{companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</h4>
                   <p className="text-[9px] text-slate-400 font-medium">Hạch toán dòng chi tài chính công trình</p>
                   <p className="text-[9px] text-slate-500 mt-1">Dự án áp: {currentVoucher.project.name}</p>
                 </div>
@@ -2747,7 +2757,7 @@ export default function HRManager({
               >
                 Hủy bỏ phiếu
               </button>
-              
+
               <button
                 type="button"
                 onClick={() => handleExportSalaryVoucherExcel(currentVoucher)}
@@ -3066,7 +3076,7 @@ export default function HRManager({
                         * Tiến độ dự án được tự động hạch toán cascade theo trung bình cộng trọng số (% Weight) của từng hạng mục công việc bên dưới.
                       </p>
                     </div>
-                    
+
                     <div className="grid grid-cols-3 gap-4 w-full md:w-auto text-center">
                       <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
                         <div className="text-[9px] text-slate-400 font-bold uppercase">NGÂN SÁCH</div>
@@ -3148,10 +3158,10 @@ export default function HRManager({
                               style={{ width: `${t.progress}%` }}
                             ></div>
                           </div>
-                          
+
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-[10px] font-mono text-slate-500 font-bold min-w-[30px] text-right">{t.progress}%</span>
-                            
+
                             {/* Real-time slider controls directly in the UI */}
                             <input
                               type="range"
@@ -3652,7 +3662,7 @@ export default function HRManager({
                   <div className="space-y-1 flex flex-col items-center justify-center p-4 border border-dashed border-red-200 bg-red-50/20 rounded-lg">
                     <div className="w-24 h-24 rounded-full border-4 border-red-600 flex items-center justify-center text-center p-1 uppercase font-black tracking-tighter text-[8px] text-red-600 rotate-12 relative shadow-sm">
                       <div className="border border-red-600 rounded-full w-full h-full flex flex-col items-center justify-center p-1 font-sans">
-                        <span>CONSTRUCT-OS</span>
+                        <span>QUẢN TRỊ DOANH NGHIỆP</span>
                         <span className="font-extrabold text-[7px] my-0.5">&bull; ĐÃ PHÊ DUYỆT &bull;</span>
                         <span className="text-[6px] tracking-widest font-mono">2026-07-08</span>
                       </div>
@@ -3702,7 +3712,7 @@ export default function HRManager({
                 <FileText className="w-4 h-4 text-purple-400" />
                 <span>XUẤT BẢN FILE KÝ HỢP ĐỒNG LAO ĐỘNG CHUẨN PHÁP LÝ</span>
               </h3>
-              
+
               <div className="flex items-center gap-2">
                 {/* Export to Word button */}
                 <button
@@ -3724,7 +3734,7 @@ export default function HRManager({
                   <Printer className="w-4 h-4" />
                   <span>In / Lưu PDF</span>
                 </button>
-                
+
                 {/* Close button */}
                 <button
                   type="button"
@@ -3771,7 +3781,7 @@ export default function HRManager({
               const docStrongBulletStyle = { margin: '0 0 10pt 0', paddingLeft: '0.6cm', textAlign: 'justify' as const, fontSize: '13pt', fontFamily: '"Times New Roman", Times, serif', lineHeight: '1.4', color: '#000000' };
 
               return (
-                <div 
+                <div
                   id="printable-contract-doc-content"
                   contentEditable={true}
                   suppressContentEditableWarning={true}
@@ -3783,7 +3793,7 @@ export default function HRManager({
                       <tr>
                         <td style={{ width: '45%', textAlign: 'center', verticalAlign: 'top', padding: '0' }}>
                           <span style={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '11pt', display: 'block', lineHeight: '1.3' }}>
-                            {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}
+                            {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                           </span>
                           <div style={{ fontSize: '11pt', fontFamily: 'monospace', color: '#64748b', marginTop: '6px' }}>
                             Số: {previewingContract.contractNumber}
@@ -3822,11 +3832,12 @@ export default function HRManager({
                   {/* Party A: Employer */}
                   <div style={{ margin: '15pt 0 10pt 0', fontFamily: '"Times New Roman", Times, serif' }}>
                     <h4 style={{ fontSize: '13pt', fontWeight: 'bold', textTransform: 'uppercase', margin: '0 0 6px 0' }}>
-                      Người sử dụng lao động: {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN XÂY DỰNG VÀ QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}
+                      Người sử dụng lao động: {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                     </h4>
                     <div style={{ paddingLeft: '0.6cm', fontSize: '13pt' }}>
                       <p style={docPNoIndentStyle}>
-                        Địa chỉ : {companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}
+                        Địa chỉ văn phòng : {companyConfig?.officeAddress || companyConfig?.siteOffice || 'Số 12 Đại lộ Nguyễn Văn Linh, Quận 7, TP. Hồ Chí Minh'}<br/>
+                        Mã số thuế : {companyConfig?.taxCode || ''}
                       </p>
                       <p style={docPNoIndentStyle}>
                         Mã số doanh nghiệp : 0317555888
@@ -3879,13 +3890,13 @@ export default function HRManager({
                   <div style={{ margin: '10pt 0', fontFamily: '"Times New Roman", Times, serif' }}>
                     <h4 style={docHeadingStyle}>Điều 1: Thời hạn và công việc hợp đồng</h4>
                     <p style={docStrongBulletStyle}>
-                      1.1. Loại hợp đồng lao động: {emp?.type === 'Internal' ? 'Hợp đồng lao động xác định thời hạn (12 tháng)' : 'Hợp đồng lao động thời vụ / khoán ngày dã chiến'}
+                      1.1. Loại hợp đồng lao động: {emp?.type === 'Internal' ? 'Hợp đồng lao động xác định thời hạn (12 tháng)' : 'Hợp đồng lao động thời vụ / khoán ngày '}
                     </p>
                     <p style={docStrongBulletStyle}>
                       1.2. Thời hạn từ ngày {formatContractDate(previewingContract.startDate)} {previewingContract.endDate ? `đến ngày ${formatContractDate(previewingContract.endDate)}` : 'cho đến khi hoàn thành bàn giao dự án xây dựng (Vô thời hạn)'}.
                     </p>
                     <p style={docStrongBulletStyle}>
-                      1.3. Đơn vị làm việc: {companyConfig?.companyName || 'Công ty Cổ phần Xây dựng và Quản lý dự án Construct-OS ERP'}
+                      1.3. Đơn vị làm việc: {companyConfig?.companyName || 'Công ty Cổ phần Đầu tư & Xây dựng Đất Việt'}
                     </p>
                     <p style={docStrongBulletStyle}>
                       1.4. Địa điểm làm việc: {proj?.name || 'Văn phòng Công ty và các Công trường Dự án trực thuộc'}
@@ -3934,10 +3945,10 @@ export default function HRManager({
                       (i) Phương tiện đi lại làm việc: Người lao động tự túc.
                     </p>
                     <p style={docPBulletStyle}>
-                      (ii) Mức lương chính thức: <strong>{formatVND(previewingContract.salaryAmount)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua AI Face ID'}).
+                      (ii) Mức lương chính thức: <strong>{formatVND(previewingContract.salaryAmount)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'đồng một tháng dương lịch' : 'đồng cho một ngày công làm việc thực tế hạch toán qua hệ thống chấm công'}).
                     </p>
                     <p style={docPBulletStyle}>
-                      (iii) Các khoản phụ cấp: <strong>{formatVND(previewingContract.allowance)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'phụ cấp tháng điện thoại, xăng xe' : 'phụ cấp tiền ăn ca dã chiến/ngày'}).
+                      (iii) Các khoản phụ cấp: <strong>{formatVND(previewingContract.allowance)}</strong> ({previewingContract.salaryType === 'Monthly' ? 'phụ cấp tháng điện thoại, xăng xe' : 'phụ cấp tiền ăn ca /ngày'}).
                     </p>
                     <p style={docPBulletStyle}>
                       (iv) Chế độ nâng lương: Theo quy định của pháp luật và Quy chế tiền lương của Công ty;
@@ -3989,7 +4000,7 @@ export default function HRManager({
                       (viii) Tham dự đầy đủ, nhiệt tình các buổi huấn luyện, đào tạo, hội thảo do Bộ phận hoặc Công ty tổ chức;
                     </p>
                     <p style={docPBulletStyle}>
-                      (ix) Hoàn trả toàn bộ chi phí đào tạo theo Hợp đồng đào tạo (nếu có ký kết) cho Người sử dụng lao động khi đơn phương chấm dứt hợp đồng trái pháp luật; hoặc trường hợp Người lao động vi phạm bất kỳ điều khoản nào của Hợp đồng, Nội quy lao động, hướng dẫn, chính sách và/hoặc quy tắc của Công ty (đã được sửa đổi theo thời gian) dẫn đến việc Người lao động bị kỷ luật sa thải trong thời gian làm việc cho Người sử dụng lao động;
+                      (ix) Hoàn trả toàn bộ chi phí đào tạo theo Hợp đồng đào tạo (nếu có ký kết) cho Người sử dụng lao động khi đơn phương chấm dứt hợp đồng trái pháp luật; hoặc trường hợp Người lao động vi phạm bất kỳ điều khoản nào của Hợp đồng, Nội quy lao động, quy định, chính sách và/hoặc quy tắc của Công ty (đã được sửa đổi theo thời gian) dẫn đến việc Người lao động bị kỷ luật sa thải trong thời gian làm việc cho Người sử dụng lao động;
                     </p>
                     <p style={docPBulletStyle}>
                       (x) Thực hiện công việc với sự tận tâm, tận lực và mẫn cán, đảm bảo hoàn thành công việc với hiệu quả cao nhất theo sự phân công, điều hành (bằng văn bản hoặc bằng miệng) của Ban Giám đốc trong Công ty (và các cá nhân được Ban Giám đốc bổ nhiệm hoặc ủy quyền phụ trách);
@@ -4055,7 +4066,7 @@ export default function HRManager({
                     <div className="space-y-1 z-10">
                       <span className="font-extrabold block text-slate-900 uppercase">NGƯỜI LAO ĐỘNG (BÊN B)</span>
                       <span className="text-[9px] text-slate-400 italic block">(Ký số ERP và ghi rõ họ tên)</span>
-                      
+
                       <div className="h-20 flex items-center justify-center relative">
                         {previewingContract.signedByEmployee ? (
                           <div className="text-center font-serif italic text-blue-800 text-lg font-bold select-none rotate-3">
@@ -4077,14 +4088,14 @@ export default function HRManager({
                     <div className="space-y-1 z-10 relative">
                       <span className="font-extrabold block text-slate-900 uppercase">ĐẠI DIỆN CÔNG TY (BÊN A)</span>
                       <span className="text-[9px] text-slate-400 italic block">(Ký tên, đóng dấu pháp nhân)</span>
-                      
+
                       <div className="h-20 flex items-center justify-center relative">
                         {previewingContract.signedByDirector ? (
                           <div className="relative flex items-center justify-center">
                             {/* Red round seal stamp */}
                             <div className="absolute w-24 h-24 rounded-full border-4 border-red-600/75 flex items-center justify-center text-center p-1 uppercase font-black tracking-tighter text-[7.5px] text-red-600/75 rotate-12 select-none z-0">
                               <div className="border border-red-600/75 rounded-full w-full h-full flex flex-col items-center justify-center p-1">
-                                <span>{(companyConfig?.companyName || 'CONSTRUCT-OS').substring(0, 15).toUpperCase()}</span>
+                                <span>{(companyConfig?.companyName || 'QUẢN TRỊ DOANH NGHIỆP').substring(0, 15).toUpperCase()}</span>
                                 <span className="font-extrabold text-[6.5px] my-0.5">&bull; ĐÃ DUYỆT BÊN A &bull;</span>
                                 <span className="text-[5.5px] tracking-widest font-mono">{previewingContract.signDate}</span>
                               </div>
@@ -4127,7 +4138,7 @@ export default function HRManager({
                 <Download className="w-4 h-4" />
                 <span>Xuất file Word (.doc)</span>
               </button>
-              
+
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -4147,18 +4158,18 @@ export default function HRManager({
           <div className={`bg-white rounded-xl shadow-xl border border-slate-200 w-full overflow-hidden animate-scale-up transition-all duration-300 ${
             detailActiveTab === 'info' ? 'max-w-2xl' : 'max-w-4xl'
           }`}>
-            
+
             {/* Header */}
             <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <Users className="w-5 h-5 text-blue-400" />
                 <span>Chi Tiết Hồ Sơ Nhân Sự & Hạch Toán</span>
               </h3>
-              <button 
+              <button
                 onClick={() => {
                   setShowDetailModal(false);
                   setSelectedEmpDetail(null);
-                }} 
+                }}
                 className="text-slate-400 hover:text-white text-lg font-bold"
               >
                 ×
@@ -4171,8 +4182,8 @@ export default function HRManager({
                 type="button"
                 onClick={() => setDetailActiveTab('info')}
                 className={`py-3 px-1 text-xs font-bold transition-all border-b-2 ${
-                  detailActiveTab === 'info' 
-                    ? 'border-blue-600 text-blue-600' 
+                  detailActiveTab === 'info'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -4182,8 +4193,8 @@ export default function HRManager({
                 type="button"
                 onClick={() => setDetailActiveTab('timesheet')}
                 className={`py-3 px-1 text-xs font-bold transition-all border-b-2 ${
-                  detailActiveTab === 'timesheet' 
-                    ? 'border-blue-600 text-blue-600' 
+                  detailActiveTab === 'timesheet'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -4193,8 +4204,8 @@ export default function HRManager({
                 type="button"
                 onClick={() => setDetailActiveTab('payroll')}
                 className={`py-3 px-1 text-xs font-bold transition-all border-b-2 ${
-                  detailActiveTab === 'payroll' 
-                    ? 'border-blue-600 text-blue-600' 
+                  detailActiveTab === 'payroll'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -4217,7 +4228,7 @@ export default function HRManager({
                       ))}
                     </ul>
                     <p className="text-[9.5px] text-rose-500 font-medium italic mt-1.5">
-                      * Ghi chú: Các vi phạm chấm công trên hệ thống ERP ảnh hưởng trực tiếp đến công tác hạch toán chi phí lương dã chiến dứt điểm cuối tháng.
+                      * Ghi chú: Các vi phạm chấm công trên hệ thống ERP ảnh hưởng trực tiếp đến công tác hạch toán chi phí lương cuối tháng.
                     </p>
                   </div>
                 </div>
@@ -4307,12 +4318,12 @@ export default function HRManager({
 
                   {/* Right Column: Virtual ID Badge & Scannable QR Code */}
                   <div className="md:col-span-5 bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-between text-center space-y-4">
-                    
+
                     {/* Badge Header */}
                     <div className="w-full">
                       <div className="text-[11px] font-black tracking-widest text-slate-400 uppercase">THẺ NHÂN SỰ RA VÀO</div>
                       <div className="text-xs font-extrabold text-blue-600 uppercase mt-0.5">
-                        {companyConfig?.companyName || 'CONSTRUCT-OS ERP'}
+                        {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                       </div>
                     </div>
 
@@ -4389,7 +4400,7 @@ export default function HRManager({
                                 <body>
                                   <div class="badge">
                                     <div class="title">THẺ NHÂN SỰ RA VÀO</div>
-                                    <div class="company">${companyConfig?.companyName || 'CONSTRUCT-OS ERP'}</div>
+                                    <div class="company">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</div>
                                     <div class="avatar">${selectedEmpDetail.name.split(' ').pop()?.charAt(0) || 'U'}</div>
                                     <h1 class="name">${selectedEmpDetail.name}</h1>
                                     <div class="role">${selectedEmpDetail.role}</div>
@@ -4402,12 +4413,11 @@ export default function HRManager({
                                       <div class="info-item"><span class="info-label">DỰ ÁN:</span> <span class="info-val">${getProjectName(selectedEmpDetail.projectId)}</span></div>
                                     </div>
                                   </div>
-                                  <script>
-                                    window.onload = function() { window.print(); }
-                                  </script>
                                 </body>
                               </html>
                             `);
+                            printWindow.document.close();
+                            setTimeout(() => printWindow.print(), 250);
                           }
                         }}
                         className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
@@ -4433,7 +4443,7 @@ export default function HRManager({
                           Bảng Chấm Công - {selectedEmpDetail.name}
                         </div>
                         <p className="text-[10px] text-slate-500 mt-0.5">
-                          Hạch toán thực tế trong tháng {selectedMonth}/{selectedYear} qua AI Face ID & Toạ độ GPS
+                          Hạch toán thực tế trong tháng {selectedMonth}/{selectedYear} qua ảnh xác minh & tọa độ GPS
                         </p>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
@@ -4466,7 +4476,7 @@ export default function HRManager({
                                     <td>${sheet.checkInTime || '-'}</td>
                                     <td>${sheet.checkOutTime || '-'}</td>
                                     <td style="font-weight: bold;">${statusVi}</td>
-                                    <td>${sheet.verifiedByFace ? 'Xác minh FaceID' : 'Thủ công'}</td>
+                                    <td>${sheet.verifiedByFace ? 'Có ảnh xác minh' : 'Không có ảnh'}</td>
                                     <td>${sheet.gpsStatus === 'In-Range' ? 'Hợp lệ' : 'Ngoài phạm vi'}</td>
                                   </tr>
                                 `;
@@ -4522,7 +4532,7 @@ export default function HRManager({
                                           <th>Giờ Vào</th>
                                           <th>Giờ Ra</th>
                                           <th>Trạng Thái</th>
-                                          <th>Face ID</th>
+                                          <th>Ảnh xác minh</th>
                                           <th>Định Vị GPS</th>
                                         </tr>
                                       </thead>
@@ -4536,10 +4546,11 @@ export default function HRManager({
                                       <div class="summary-row"><span>Đi muộn:</span><strong>${data.daysLate} ngày</strong></div>
                                       <div class="summary-row"><span>Vắng mặt:</span><strong>${data.daysAbsent} ngày</strong></div>
                                     </div>
-                                    <script>window.onload = function() { window.print(); }</script>
                                   </body>
                                 </html>
                               `);
+                              printWindow.document.close();
+                              setTimeout(() => printWindow.print(), 250);
                             }
                           }}
                           className="flex-1 sm:flex-none px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-md text-[10px] font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
@@ -4585,7 +4596,7 @@ export default function HRManager({
                               <th className="px-4 py-2 text-center">Giờ Vào</th>
                               <th className="px-4 py-2 text-center">Giờ Ra</th>
                               <th className="px-4 py-2 text-center">Trạng Thái</th>
-                              <th className="px-4 py-2 text-center">Face ID</th>
+                              <th className="px-4 py-2 text-center">Ảnh xác minh</th>
                               <th className="px-4 py-2 text-center">Định Vị GPS</th>
                             </tr>
                           </thead>
@@ -4614,7 +4625,7 @@ export default function HRManager({
                                       sheet.verifiedByFace ? 'text-emerald-600' : 'text-slate-400'
                                     }`}>
                                       <span className={`w-1.5 h-1.5 rounded-full ${sheet.verifiedByFace ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                                      {sheet.verifiedByFace ? 'Đã xác thực' : 'Thủ công'}
+                                      {sheet.verifiedByFace ? 'Có ảnh' : 'Không có ảnh'}
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5 text-center">
@@ -4788,13 +4799,13 @@ export default function HRManager({
                           <tr className="hover:bg-slate-50/50">
                             <td className="px-4 py-3">
                               <div className="font-semibold">{workDaysLabel}</div>
-                              <div className="text-[9px] text-slate-400 mt-0.5">Số ngày công thực tế ghi nhận ra vào cổng Face ID</div>
+                              <div className="text-[9px] text-slate-400 mt-0.5">Số ngày công thực tế ghi nhận trên hệ thống</div>
                             </td>
                             <td className="px-4 py-3 text-right font-mono font-bold text-slate-500">
                               {data.daysPresent} ngày
                             </td>
                             <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
-                              {data.isDailyWage 
+                              {data.isDailyWage
                                 ? formatVND(data.daysPresent * selectedEmpDetail.baseSalary)
                                 : formatVND(data.totalEarned - (data.daysOvertime * 450000) + (data.daysLate * 50000))
                               }
@@ -4913,19 +4924,19 @@ export default function HRManager({
       {showQrScanModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-scale-up">
-            
+
             {/* Header */}
             <div className="bg-purple-900 px-6 py-4 flex items-center justify-between text-white">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-purple-400" />
                 <span>Hệ Thống Quét Mã QR Điểm Danh Chấm Công</span>
               </h3>
-              <button 
+              <button
                 onClick={() => {
                   setShowQrScanModal(false);
                   setScannedResult(null);
                   setQrScanEmpId('');
-                }} 
+                }}
                 className="text-slate-400 hover:text-white text-lg font-bold"
               >
                 ×
@@ -4934,19 +4945,19 @@ export default function HRManager({
 
             {/* Content */}
             <div className="p-6 space-y-5">
-              
+
               {/* Virtual Scanner Viewfinder */}
               <div className="h-44 bg-slate-950 rounded-xl overflow-hidden flex flex-col items-center justify-center border-2 border-slate-800 relative shadow-inner">
                 {/* Scanner Laser beam simulation */}
                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-red-500 animate-bounce shadow-[0_0_10px_rgba(239,68,68,1)]"></div>
-                
+
                 {/* Scanning overlay framing */}
                 <div className="w-32 h-32 border-2 border-purple-500/30 rounded-lg flex items-center justify-center relative">
                   <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-purple-500"></div>
                   <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-purple-500"></div>
                   <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-purple-500"></div>
                   <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-purple-500"></div>
-                  
+
                   {scannedResult ? (
                     <CheckCircle2 className="w-12 h-12 text-emerald-500 animate-pulse" />
                   ) : (

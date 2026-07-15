@@ -1,25 +1,27 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Database, 
-  ArrowDownLeft, 
-  ArrowUpRight, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Search, 
-  Plus, 
-  Building2, 
-  ClipboardList, 
-  FileSpreadsheet, 
-  Activity, 
-  ShieldCheck, 
+import {
+  Database,
+  ArrowDownLeft,
+  ArrowUpRight,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  Plus,
+  Building2,
+  ClipboardList,
+  FileSpreadsheet,
+  Activity,
+  ShieldCheck,
   Boxes,
   HelpCircle,
   TrendingDown,
   Printer,
   Download,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { InventoryItem, InventoryLedger, MaterialLimit, Project, FinancialTransaction, CompanyConfig, UserRole } from '../types';
+import { normalizeBusinessId } from '../lib/businessIds';
 
 interface WarehouseManagerProps {
   projects: Project[];
@@ -52,6 +54,7 @@ export default function WarehouseManager({
   companyConfig,
   userRole
 }: WarehouseManagerProps) {
+  const canManageOperations = userRole === 'CEO' || userRole === 'SiteManager' || userRole === 'SiteAccountant';
   const [warehouseTab, setWarehouseTab] = useState<'stock' | 'transaction' | 'ledger'>('stock');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -120,10 +123,13 @@ export default function WarehouseManager({
       return;
     }
 
-    const generatedId = `item-${Date.now().toString().slice(-4)}`;
-    const generatedCode = newItem.code || `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`;
+    const generatedCode = normalizeBusinessId(newItem.code || `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`, `VT-${(inventoryItems.length + 1).toString().padStart(3, '0')}`);
+    if (inventoryItems.some(item => item.id === generatedCode || item.code === generatedCode)) {
+      showToast(`Mã vật tư ${generatedCode} đã tồn tại.`);
+      return;
+    }
     const createdItem: InventoryItem = {
-      id: generatedId,
+      id: generatedCode,
       code: generatedCode,
       name: newItem.name,
       unit: newItem.unit,
@@ -134,10 +140,30 @@ export default function WarehouseManager({
     };
 
     setInventoryItems(prev => [...prev, createdItem]);
-    setVoucher(prev => ({ ...prev, itemId: generatedId })); // Auto-select the newly registered item
+    setVoucher(prev => ({ ...prev, itemId: generatedCode })); // Auto-select the newly registered item
     showToast(`Đã thêm mã vật tư mới thành công: ${newItem.name} (${generatedCode})`);
     setShowAddItemModal(false);
     setNewItem({ code: '', name: '', unit: '', avgCost: 100000, initialQty: 0 });
+  };
+
+  const handleDeleteItem = (item: InventoryItem) => {
+    const relatedLedgerIds = new Set(
+      inventoryLedger.filter(row => row.itemId === item.id).map(row => row.id),
+    );
+    const relatedLimitCount = materialLimits.filter(row => row.itemId === item.id).length;
+    const message = relatedLedgerIds.size || relatedLimitCount || item.onHand !== 0
+      ? `Vật tư ${item.code || item.id} đang có tồn kho hoặc dữ liệu nhập/xuất, định mức liên quan. Xóa sẽ dọn toàn bộ dữ liệu này. Bạn có chắc chắn?`
+      : `Xóa vật tư ${item.code || item.id} - ${item.name}?`;
+    if (!window.confirm(message)) return;
+
+    const remainingItems = inventoryItems.filter(row => row.id !== item.id);
+    setInventoryItems(remainingItems);
+    setInventoryLedger(rows => rows.filter(row => row.itemId !== item.id));
+    setMaterialLimits(rows => rows.filter(row => row.itemId !== item.id));
+    setTransactions(rows => rows.filter(row => !row.referenceId || !relatedLedgerIds.has(row.referenceId)));
+    setVoucher(current => current.itemId === item.id ? { ...current, itemId: remainingItems[0]?.id || '' } : current);
+    if (selectedItemFilter === item.id) setSelectedItemFilter('all');
+    showToast(`Đã xóa vật tư ${item.code || item.id} và dữ liệu kho liên quan.`);
   };
 
   // Export Warehouse Voucher to Excel (Blank signatures)
@@ -180,7 +206,7 @@ export default function WarehouseManager({
       <body>
         <table class="header-table">
           <tr>
-            <td colspan="4" style="font-weight: bold; text-transform: uppercase;">${companyConfig?.companyName || 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}</td>
+            <td colspan="4" style="font-weight: bold; text-transform: uppercase;">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</td>
             <td colspan="3" style="text-align: right; font-weight: bold; font-family: monospace;">SỐ PHIẾU: ${voucher.id}</td>
           </tr>
           <tr>
@@ -188,7 +214,7 @@ export default function WarehouseManager({
             <td colspan="3" style="text-align: right;">Mẫu số: ${voucher.type === 'Receipt' ? '01-VT' : '02-VT'} (TT 200/2014/TT-BTC)</td>
           </tr>
           <tr>
-            <td colspan="4">Địa điểm công trường: ${companyConfig?.siteOffice || 'Dã chiến quốc lộ / Công trình cấp bách'}</td>
+            <td colspan="4">Địa điểm công trường: ${companyConfig?.siteOffice || ' quốc lộ / Công trình cấp bách'}</td>
             <td colspan="3" style="text-align: right;">Ngày lập: ${voucher.date}</td>
           </tr>
         </table>
@@ -196,14 +222,14 @@ export default function WarehouseManager({
         <br>
         <div class="title">${voucher.type === 'Receipt' ? 'PHIẾU NHẬP KHO VẬT TƯ' : 'PHIẾU XUẤT KHO CẤP PHÁT'}</div>
         <div class="subtitle">
-          ${voucher.type === 'Receipt' 
-            ? 'Nợ TK 152 (Nguyên liệu, vật liệu) &bull; Có TK 331 / 111' 
+          ${voucher.type === 'Receipt'
+            ? 'Nợ TK 152 (Nguyên liệu, vật liệu) &bull; Có TK 331 / 111'
             : 'Nợ TK 621 (Chi phí NVL trực tiếp) &bull; Có TK 152 (Vật liệu)'}
         </div>
 
         <table class="header-table" style="margin-top: 10px;">
           <tr>
-            <td colspan="3"><strong>${voucher.type === 'Receipt' ? 'Họ tên người giao:' : 'Họ tên người nhận:'}</strong> ${voucher.sourceOrDestination.split(' (')[0] || 'Đối tác cấp phát dã chiến'}</td>
+            <td colspan="3"><strong>${voucher.type === 'Receipt' ? 'Họ tên người giao:' : 'Họ tên người nhận:'}</strong> ${voucher.sourceOrDestination.split(' (')[0] || 'Đối tác cấp phát '}</td>
             <td colspan="4"><strong>Nơi giao / Nơi nhận hạch toán:</strong> ${voucher.sourceOrDestination}</td>
           </tr>
           <tr>
@@ -248,7 +274,7 @@ export default function WarehouseManager({
           <tr>
             <td style="width: 25%; text-align: center; font-weight: bold; text-transform: uppercase; border: none;">Người lập phiếu</td>
             <td style="width: 25%; text-align: center; font-weight: bold; text-transform: uppercase; border: none;">Người giao / nhận</td>
-            <td style="width: 25%; text-align: center; font-weight: bold; text-transform: uppercase; border: none;">Thủ kho dã chiến</td>
+            <td style="width: 25%; text-align: center; font-weight: bold; text-transform: uppercase; border: none;">Thủ kho </td>
             <td style="width: 25%; text-align: center; font-weight: bold; text-transform: uppercase; border: none;">Chỉ huy trưởng / Duyệt</td>
           </tr>
           <tr>
@@ -272,7 +298,7 @@ export default function WarehouseManager({
         </table>
 
         <br><br>
-        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán dã chiến ${companyConfig?.appTitle || 'Construct-OS'} &bull; Ngày xuất báo cáo: ${reportDateStr}</div>
+        <div style="font-style: italic; font-size: 8.5pt; color: #64748b;">Hệ thống hạch toán ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'} &bull; Ngày xuất báo cáo: ${reportDateStr}</div>
       </body>
       </html>
     `;
@@ -291,6 +317,10 @@ export default function WarehouseManager({
   // Post Receipt / Issue Voucher
   const handlePostVoucher = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageOperations) {
+      showToast('Tài khoản hiện tại chỉ được xem dữ liệu kho vật tư.');
+      return;
+    }
     const item = inventoryItems.find(i => i.id === voucher.itemId);
     if (!item) {
       showToast('Vật tư không hợp lệ.');
@@ -341,7 +371,7 @@ export default function WarehouseManager({
       type: voucher.type,
       quantity: qty,
       unitPrice: selectedPrice,
-      sourceOrDestination: voucher.sourceOrDestination || (voucher.type === 'Receipt' ? 'Nhà cung cấp dã chiến' : 'Tổ thi công hiện trường'),
+      sourceOrDestination: voucher.sourceOrDestination || (voucher.type === 'Receipt' ? 'Nhà cung cấp ' : 'Tổ thi công hiện trường'),
       date: dateStr,
       approvedBy: voucher.approvedBy
     };
@@ -349,13 +379,13 @@ export default function WarehouseManager({
     setInventoryLedger(prev => [newLedger, ...prev]);
 
     // 2. Update physical inventory items catalog
-    setInventoryItems(prevItems => 
+    setInventoryItems(prevItems =>
       prevItems.map(i => {
         if (i.id === voucher.itemId) {
           const newReceived = voucher.type === 'Receipt' ? i.totalReceived + qty : i.totalReceived;
           const newIssued = voucher.type === 'Issue' ? i.totalIssued + qty : i.totalIssued;
           const newOnHand = voucher.type === 'Receipt' ? i.onHand + qty : i.onHand - qty;
-          
+
           // Re-calculate weighted average cost if it is a new receipt
           let newAvgCost = i.avgCost;
           if (voucher.type === 'Receipt') {
@@ -397,14 +427,14 @@ export default function WarehouseManager({
     // 4. Auto accounting integration: if checked, buy actions create cash outflow P&L transaction!
     if (voucher.autoAccounting) {
       const totalCost = qty * selectedPrice;
-      
+
       const newTx: FinancialTransaction = {
         id: `tx-mat-${Date.now()}`,
         projectId: voucher.projectId,
         type: voucher.type === 'Receipt' ? 'Expense' : 'Expense', // Material receipt is payment, issue is construction allocation
         category: 'Material',
         amount: totalCost,
-        description: voucher.type === 'Receipt' 
+        description: voucher.type === 'Receipt'
           ? `Thanh toán mua vật tư hàng hóa "${item.name}" - ${qty} ${item.unit} (Phiếu: ${generatedLedgerId})`
           : `Phân bổ chi phí xuất kho thi công "${item.name}" - ${qty} ${item.unit} (Phiếu: ${generatedLedgerId})`,
         date: dateStr,
@@ -416,7 +446,7 @@ export default function WarehouseManager({
       setTransactions(prev => [newTx, ...prev]);
 
       // Cascade update: increase spent budget of the project
-      setProjects(prevProjs => 
+      setProjects(prevProjs =>
         prevProjs.map(p => {
           if (p.id === voucher.projectId) {
             return {
@@ -504,8 +534,8 @@ export default function WarehouseManager({
         </style>
       </head>
       <body>
-        <div style="font-weight: bold; text-transform: uppercase; font-size: 10pt;">${companyConfig?.companyName || 'CONSTRUCT-OS ERP CONSTRUCTION'}</div>
-        <div style="font-size: 9pt; color: #64748b;">Hệ thống Kiểm soát Chống thất thoát vật tư - ${companyConfig?.appTitle || 'Construct-OS'}</div>
+        <div style="font-weight: bold; text-transform: uppercase; font-size: 10pt;">${companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}</div>
+        <div style="font-size: 9pt; color: #64748b;">Hệ thống Kiểm soát Chống thất thoát vật tư - ${companyConfig?.appTitle || 'Quản trị doanh nghiệp'}</div>
         <br>
         <div class="title">SỔ ĐỐI CHIẾU & NHẬT KÝ CHI TIẾT NHẬP XUẤT KHO VẬT TƯ</div>
         <div style="text-align: center; font-style: italic; font-size: 10pt; margin-bottom: 20px;">Thời điểm kết xuất: ${reportDateStr}</div>
@@ -560,22 +590,6 @@ export default function WarehouseManager({
 
   return (
     <div className="bg-slate-50 min-h-[500px]" id="warehouse-logistics-section">
-      {/* Role-Based Info Banner */}
-      {(userRole === 'Auditor' || userRole === 'SiteManager') && (
-        <div className="mx-4 mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] flex items-center justify-between gap-3 text-amber-850">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-xs uppercase tracking-wider text-[9px] shrink-0">
-              {userRole === 'Auditor' ? 'Thanh tra / Khách' : 'Chỉ Huy Trưởng'}
-            </span>
-            <span>
-              {userRole === 'Auditor' 
-                ? 'Bạn đang ở chế độ xem báo cáo dã chiến. Các thao tác lập phiếu nhập/xuất kho hoặc thay đổi định mức dự toán bị khóa.'
-                : 'Bạn đang quản lý công trường dã chiến. Bạn có thể xuất kho vật tư dã chiến cho tổ thi công, nhưng quyền chỉnh sửa danh mục vật tư gốc và thay đổi định mức kế hoạch thuộc về CEO/Kế toán.'}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Mini tabs */}
       <div className="flex border-b border-slate-200 bg-white px-4 pt-1 shadow-xs gap-4 mb-4">
         <button
@@ -640,19 +654,21 @@ export default function WarehouseManager({
               />
             </div>
 
-            <button
-              onClick={() => setShowAddItemModal(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Đăng Ký Mã Vật Tư</span>
-            </button>
+            {userRole === 'CEO' && (
+              <button
+                onClick={() => setShowAddItemModal(true)}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm Vật Tư</span>
+              </button>
+            )}
           </div>
 
           {/* Catalog items list */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-              <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Danh mục hàng hóa tồn kho thực tế dã chiến</h4>
+              <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Danh mục hàng hóa tồn kho thực tế </h4>
             </div>
 
             <div className="overflow-x-auto">
@@ -667,6 +683,7 @@ export default function WarehouseManager({
                     <th className="px-4 py-3 text-right bg-blue-50/50 text-blue-900">TỒN KHO THỰC TẾ</th>
                     <th className="px-4 py-3 text-right">Đơn giá mua bình quân</th>
                     <th className="px-4 py-3 text-right">Tổng giá trị tồn kho</th>
+                    {userRole === 'CEO' && <th className="px-4 py-3 text-center">Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -686,6 +703,19 @@ export default function WarehouseManager({
                         <td className="px-4 py-3 text-right font-mono text-slate-800 font-bold">
                           {formatVND(item.onHand * item.avgCost)}
                         </td>
+                        {userRole === 'CEO' && (
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(item)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                              title={`Xóa vật tư ${item.code || item.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Xóa
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                 </tbody>
@@ -721,7 +751,7 @@ export default function WarehouseManager({
                     const item = inventoryItems.find(i => i.id === l.itemId);
                     const remaining = l.plannedQty - l.actualIssuedQty;
                     const pct = Math.min(100, Math.round((l.actualIssuedQty / l.plannedQty) * 100));
-                    
+
                     const isOver = l.actualIssuedQty > l.plannedQty;
                     const isWarning = !isOver && l.actualIssuedQty >= l.plannedQty * 0.9;
 
@@ -738,7 +768,7 @@ export default function WarehouseManager({
                         <td className="px-4 py-3 text-center w-40">
                           <div className="flex items-center gap-2">
                             <div className="w-full bg-slate-100 rounded-full h-2">
-                              <div 
+                              <div
                                 className={`h-2 rounded-full ${
                                   isOver ? 'bg-rose-600' : isWarning ? 'bg-amber-500' : 'bg-emerald-500'
                                 }`}
@@ -780,7 +810,7 @@ export default function WarehouseManager({
             <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-blue-400" />
-                <span>Khai báo lập phiếu xuất nhập kho dã chiến</span>
+                <span>Khai báo lập phiếu xuất nhập kho </span>
               </h3>
             </div>
 
@@ -1046,8 +1076,8 @@ export default function WarehouseManager({
                 <Boxes className="w-5 h-5 text-blue-400" />
                 <span>Đăng Ký Mã Vật Tư Mới</span>
               </h3>
-              <button 
-                onClick={() => setShowAddItemModal(false)} 
+              <button
+                onClick={() => setShowAddItemModal(false)}
                 className="text-slate-400 hover:text-white text-lg font-bold"
               >
                 ×
@@ -1093,7 +1123,7 @@ export default function WarehouseManager({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase">Tồn dã chiến đầu kỳ *</label>
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase">Tồn đầu kỳ *</label>
                   <input
                     type="number"
                     min="0"
@@ -1148,7 +1178,7 @@ export default function WarehouseManager({
                 <FileText className="w-4 h-4 text-emerald-400" />
                 <span>Xuất Bản Chứng Từ Kho (Excel Lưu Ký)</span>
               </h3>
-              
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1158,7 +1188,7 @@ export default function WarehouseManager({
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>Xuất Excel Ký</span>
                 </button>
-                
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1178,12 +1208,12 @@ export default function WarehouseManager({
               <div className="flex items-start justify-between border-b border-dashed border-slate-300 pb-4">
                 <div className="space-y-0.5">
                   <h4 className="font-extrabold text-[11px] text-slate-850 uppercase tracking-tight font-sans">
-                    {companyConfig?.companyName || 'CÔNG TY CP XÂY DỰNG & QUẢN LÝ DỰ ÁN CONSTRUCT-OS ERP'}
+                    {companyConfig?.companyName || 'CÔNG TY CỔ PHẦN ĐẦU TƯ & XÂY DỰNG ĐẤT VIỆT'}
                   </h4>
                   <p className="text-[9px] text-slate-500 font-sans">Ban Điều Hành Dự Án: <span className="font-bold text-slate-700">{getProjectName(selectedLedgerVoucher.projectId)}</span></p>
-                  <p className="text-[9px] text-slate-500 font-sans">Địa điểm công trường: Dã chiến quốc lộ / Công trình cấp bách</p>
+                  <p className="text-[9px] text-slate-500 font-sans">Địa điểm công trường: Quốc lộ / Công trình cấp bách</p>
                 </div>
-                
+
                 <div className="text-right space-y-0.5 font-sans">
                   <h3 className="font-black text-slate-900 text-xs tracking-widest font-mono">{selectedLedgerVoucher.id}</h3>
                   <p className="text-[8.5px] text-slate-400">Ban hành theo TT 200/2014/TT-BTC</p>
@@ -1198,8 +1228,8 @@ export default function WarehouseManager({
                   {selectedLedgerVoucher.type === 'Receipt' ? 'PHIẾU NHẬP KHO VẬT TƯ' : 'PHIẾU XUẤX KHO CẤP PHÁT'}
                 </h2>
                 <p className="text-[9.5px] text-slate-500 font-sans italic">
-                  {selectedLedgerVoucher.type === 'Receipt' 
-                    ? 'Nợ TK 152 (Nguyên liệu, vật liệu) &bull; Có TK 331 / 111' 
+                  {selectedLedgerVoucher.type === 'Receipt'
+                    ? 'Nợ TK 152 (Nguyên liệu, vật liệu) &bull; Có TK 331 / 111'
                     : 'Nợ TK 621 (Chi phí NVL trực tiếp) &bull; Có TK 152 (Vật liệu)'}
                 </p>
               </div>
@@ -1211,7 +1241,7 @@ export default function WarehouseManager({
                     <span className="text-[9px] text-slate-400 font-extrabold uppercase block">
                       {selectedLedgerVoucher.type === 'Receipt' ? 'Họ tên người giao vật tư:' : 'Họ tên người nhận vật tư:'}
                     </span>
-                    <span className="font-bold text-slate-800">{selectedLedgerVoucher.sourceOrDestination.split(' (')[0] || 'Đối tác cấp phát dã chiến'}</span>
+                    <span className="font-bold text-slate-800">{selectedLedgerVoucher.sourceOrDestination.split(' (')[0] || 'Đối tác cấp phát '}</span>
                   </div>
                   <div>
                     <span className="text-[9px] text-slate-400 font-extrabold uppercase block">Nơi giao / Nơi nhận hạch toán:</span>
@@ -1297,7 +1327,7 @@ export default function WarehouseManager({
 
                 {/* 3 */}
                 <div className="space-y-0.5">
-                  <span className="font-extrabold block text-slate-900 uppercase">Thủ kho dã chiến</span>
+                  <span className="font-extrabold block text-slate-900 uppercase">Thủ kho </span>
                   <span className="text-[8px] text-slate-400 italic block">(Ký, ghi rõ họ tên)</span>
                   <div className="h-12 flex items-end justify-center">
                     <span className="text-slate-300">.......................</span>
@@ -1329,7 +1359,7 @@ export default function WarehouseManager({
               >
                 Đóng lại
               </button>
-              
+
               <button
                 type="button"
                 onClick={() => handleExportVoucherExcel(selectedLedgerVoucher)}
